@@ -750,7 +750,6 @@ export class CetusService {
     amountB: string,
     slippage: number
   ): Promise<Transaction> {
-    const { Transaction: TransactionBuilder } = require('@mysten/sui/transactions');
     const txb = new Transaction();
     
     // Cetus CLMM package address (mainnet)
