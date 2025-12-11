@@ -186,6 +186,7 @@ Reply /pools for detailed view`;
 
     this.bot.onText(/\/status/, handlers.status || (() => Promise.resolve()));
     this.bot.onText(/\/pools/, handlers.pools || (() => Promise.resolve()));
+    this.bot.onText(/\/balance/, handlers.balance || (() => Promise.resolve()));
     this.bot.onText(/\/skim/, handlers.skim || (() => Promise.resolve()));
     this.bot.onText(/\/pnl/, handlers.pnl || (() => Promise.resolve()));
     this.bot.onText(/\/pause (.+)/, handlers.pause || (() => Promise.resolve()));

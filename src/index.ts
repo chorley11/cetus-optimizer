@@ -27,6 +27,8 @@ class CetusOptimizer {
   private monitoringInterval: NodeJS.Timeout | null = null;
   private startTime: Date = new Date();
   private poolStates: Map<string, { paused: boolean; consecutiveFailures: number }> = new Map();
+  private balanceCheckCounter: number = 0;
+  private lastBalanceAlert: Date | null = null;
 
   constructor() {
     // Initialize services
@@ -264,6 +266,41 @@ class CetusOptimizer {
     }
   }
 
+  private async checkWalletBalance(): Promise<void> {
+    try {
+      const address = this.suiService.getAddress();
+      const balance = await this.suiService.getSuiBalance(address);
+      
+      // Only alert if balance is low and we haven't alerted recently (within 24 hours)
+      const now = new Date();
+      const hoursSinceLastAlert = this.lastBalanceAlert
+        ? (now.getTime() - this.lastBalanceAlert.getTime()) / (1000 * 60 * 60)
+        : Infinity;
+      
+      if (balance < 0.1 && hoursSinceLastAlert >= 24) {
+        Logger.warn('Low wallet balance detected during monitoring', { balance });
+        await this.telegram.sendErrorAlert({
+          type: 'Low Wallet Balance',
+          message: `Wallet balance is critically low: ${balance.toFixed(4)} SUI. Need at least 0.1 SUI for gas. Please add more SUI to continue operations.`,
+        });
+        this.lastBalanceAlert = now;
+      } else if (balance < 0.5 && hoursSinceLastAlert >= 24) {
+        Logger.warn('Low wallet balance detected', { balance });
+        await this.telegram.sendMessage(
+          `⚠️ *LOW WALLET BALANCE*\n\n` +
+          `Current: ${balance.toFixed(4)} SUI\n` +
+          `Recommended: 1-5 SUI\n` +
+          `Address: \`${address}\`\n\n` +
+          `Consider adding more SUI for reliable operations.`
+        );
+        this.lastBalanceAlert = now;
+      }
+    } catch (error) {
+      Logger.error('Failed to check wallet balance during monitoring', error);
+      // Don't throw - balance check failure shouldn't stop monitoring
+    }
+  }
+
   private setupTelegramCommands(): void {
     this.telegram.setupCommands({
       status: async (msg) => {
@@ -335,11 +372,70 @@ ${status.readyForDeposit ? '✅ Ready for Bluefin deposit' : '⏳ Accumulating..
         // Mark deposit as completed
         await this.bluefinPipeline.recordDeposit('USDC', 0);
       },
+      balance: async (msg) => {
+        try {
+          const address = this.suiService.getAddress();
+          const suiBalance = await this.suiService.getSuiBalance(address);
+          
+          // Get USDC balance if possible
+          const client = this.suiService.getClient();
+          let usdcBalance = 0;
+          try {
+            const { getCoinBalance } = require('../utils/coinUtils');
+            const usdcCoinType = process.env.USDC_COIN_TYPE || '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93b2::coin::COIN';
+            const usdcBalanceRaw = await getCoinBalance(client, address, usdcCoinType);
+            usdcBalance = Number(usdcBalanceRaw) / 1e6; // USDC has 6 decimals
+          } catch (error) {
+            // USDC balance check failed, continue with SUI only
+          }
+          
+          // Get all coins for other tokens
+          const allCoins = await client.getCoins({ owner: address });
+          const otherTokens = allCoins.data
+            .filter(c => c.coinType !== '0x2::sui::SUI')
+            .slice(0, 5); // Limit to first 5 other tokens
+          
+          let message = `💰 *WALLET BALANCE*\n\n`;
+          message += `*Address:* \`${address}\`\n\n`;
+          message += `*SUI:* ${suiBalance.toFixed(4)} SUI\n`;
+          
+          if (suiBalance < 0.1) {
+            message += `⚠️ *LOW BALANCE* - Need at least 0.1 SUI for gas\n`;
+          } else if (suiBalance < 1) {
+            message += `⚠️ Balance is low - Consider adding more SUI\n`;
+          } else {
+            message += `✅ Balance sufficient\n`;
+          }
+          
+          if (usdcBalance > 0) {
+            message += `\n*USDC:* $${usdcBalance.toFixed(2)}\n`;
+          }
+          
+          if (otherTokens.length > 0) {
+            message += `\n*Other Tokens:*\n`;
+            for (const coin of otherTokens) {
+              const symbol = coin.coinType.split('::').pop() || 'Unknown';
+              const balance = Number(coin.balance) / 1e9; // Assume 9 decimals, adjust if needed
+              message += `- ${symbol}: ${balance.toFixed(4)}\n`;
+            }
+          }
+          
+          message += `\n*Gas Estimate:*\n`;
+          message += `- Per transaction: ~0.01-0.1 SUI\n`;
+          message += `- Recommended reserve: 1-5 SUI\n`;
+          
+          await this.telegram.sendMessage(message);
+        } catch (error) {
+          Logger.error('Failed to get wallet balance', error);
+          await this.telegram.sendMessage(`❌ Failed to get wallet balance: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
       help: async (msg) => {
         const helpText = `*CETUS OPTIMIZER COMMANDS*
 
 /status - Current status of all pools
 /pools - Detailed pool metrics
+/balance - Check wallet balance
 /skim - Skim wallet balances
 /pnl - Profit/loss summary
 /pause [POOL] - Pause specific pool
