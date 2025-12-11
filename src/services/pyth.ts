@@ -135,15 +135,25 @@ export class PythService {
         const usdcPrice = await this.getPrice('USDC/USD');
         return suiPrice / usdcPrice; // SUI per USDC
       } else if (poolName === 'DEEP/SUI') {
-        // Get DEEP/USD and SUI/USD, then calculate ratio
-        const deepPrice = await this.getPrice('DEEP/USD');
-        const suiPrice = await this.getPrice('SUI/USD');
-        return deepPrice / suiPrice; // DEEP per SUI
+        // DEEP/USD feed may not exist, fallback to error
+        try {
+          const deepPrice = await this.getPrice('DEEP/USD');
+          const suiPrice = await this.getPrice('SUI/USD');
+          return deepPrice / suiPrice; // DEEP per SUI
+        } catch (error) {
+          Logger.warn('DEEP/USD feed not available, cannot calculate DEEP/SUI price');
+          throw new Error(`DEEP/USD price feed not configured. Set PYTH_DEEP_USD_FEED or use Cetus fallback.`);
+        }
       } else if (poolName === 'WAL/SUI') {
-        // Get WAL/USD and SUI/USD, then calculate ratio
-        const walPrice = await this.getPrice('WAL/USD');
-        const suiPrice = await this.getPrice('SUI/USD');
-        return walPrice / suiPrice; // WAL per SUI
+        // WAL/USD feed may not exist, fallback to error
+        try {
+          const walPrice = await this.getPrice('WAL/USD');
+          const suiPrice = await this.getPrice('SUI/USD');
+          return walPrice / suiPrice; // WAL per SUI
+        } catch (error) {
+          Logger.warn('WAL/USD feed not available, cannot calculate WAL/SUI price');
+          throw new Error(`WAL/USD price feed not configured. Set PYTH_WAL_USD_FEED or use Cetus fallback.`);
+        }
       } else {
         throw new Error(`Unsupported pool pair: ${poolName}`);
       }

@@ -25,8 +25,8 @@ export class PriceMonitor {
     this.cetusService = cetusService;
     this.pythService = pythService;
     this.db = db;
-    // Use Pyth if available, otherwise fallback to Cetus
-    this.usePyth = !!pythService && (process.env.USE_PYTH_PRICES === 'true');
+    // Use Pyth if available, default to true (can be disabled with USE_PYTH_PRICES=false)
+    this.usePyth = !!pythService && (process.env.USE_PYTH_PRICES !== 'false');
   }
 
   async fetchPrice(poolConfig: PoolConfig): Promise<PriceSnapshot> {
