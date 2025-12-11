@@ -25,9 +25,11 @@ export interface PositionInfo {
 export class CetusService {
   private sdk: CetusClmmSDK;
   private suiClient: SuiClient;
+  private suiService: any; // Store SuiService reference for coin operations
 
-  constructor(suiClient: SuiClient, network: 'mainnet' | 'testnet' = 'mainnet') {
+  constructor(suiClient: SuiClient, network: 'mainnet' | 'testnet' = 'mainnet', suiService?: any) {
     this.suiClient = suiClient;
+    this.suiService = suiService; // Store SuiService reference
     // Cetus SDK initialization
     // The SDK needs the fullNodeUrl parameter explicitly set
     const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
@@ -386,7 +388,9 @@ export class CetusService {
     tickUpper: number,
     amountA: string,
     amountB: string,
-    slippage: number = 0.5
+    slippage: number = 0.5,
+    coinTypeA?: string,
+    coinTypeB?: string
   ) {
     return retryWithBackoff(async () => {
       // Patch SDK client before making position calls
@@ -415,7 +419,9 @@ export class CetusService {
           tickUpper,
           amountA,
           amountB,
-          slippage
+          slippage,
+          coinTypeA,
+          coinTypeB
         );
       }
       
@@ -504,7 +510,9 @@ export class CetusService {
           tickUpper,
           amountA,
           amountB,
-          slippage
+          slippage,
+          coinTypeA,
+          coinTypeB
         );
       }
     });
@@ -749,14 +757,14 @@ export class CetusService {
     tickUpper: number,
     amountA: string,
     amountB: string,
-    slippage: number
+    slippage: number,
+    coinTypeA?: string,
+    coinTypeB?: string
   ): Promise<Transaction> {
     const txb = new Transaction();
     
     // Cetus CLMM package address (mainnet)
-    // This is the published Move package for Cetus Protocol CLMM
     const CETUS_PACKAGE = process.env.CETUS_PACKAGE || '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb';
-    const CLMM_MODULE = 'clmm';
     
     Logger.info('Building position transaction manually using Move calls', {
       poolAddress,
@@ -764,52 +772,112 @@ export class CetusService {
       tickUpper,
       amountA,
       amountB,
-      cetusPackage: CETUS_PACKAGE,
+      coinTypeA,
+      coinTypeB,
     });
+    
+    // Validate coin types are provided
+    if (!coinTypeA || !coinTypeB) {
+      throw new Error(
+        'Manual position creation requires coin types. ' +
+        `coinTypeA: ${coinTypeA || 'missing'}, coinTypeB: ${coinTypeB || 'missing'}. ` +
+        'Please ensure pool config includes token addresses.'
+      );
+    }
     
     try {
       // Get pool object
       const poolObj = txb.object(poolAddress);
       
-      // Try to use SDK's internal transaction builder if available
-      const sdkAny = this.sdk as any;
+      // Get coin objects for both tokens
+      const walletAddress = this.suiService.getAddress();
+      const coinObjectsA = await this.suiService.getOwnedCoinObjects(walletAddress, coinTypeA);
+      const coinObjectsB = await this.suiService.getOwnedCoinObjects(walletAddress, coinTypeB);
       
-      // Check if SDK has any internal transaction building methods
-      if (sdkAny.utils?.buildTransaction || sdkAny.TransactionBuilder) {
-        Logger.debug('Found SDK transaction builder, attempting to use it');
-        // This would require knowing the SDK's internal structure
+      if (coinObjectsA.length === 0) {
+        throw new Error(`No ${coinTypeA} coins found in wallet`);
+      }
+      if (coinObjectsB.length === 0) {
+        throw new Error(`No ${coinTypeB} coins found in wallet`);
       }
       
-      // Build transaction using Move call directly
-      // Cetus CLMM open_position function signature:
-      // open_position<CoinTypeA, CoinTypeB>(
+      // Convert amounts to bigint (handling decimals)
+      const amountABigInt = BigInt(amountA);
+      const amountBBigInt = BigInt(amountB);
+      
+      // Prepare coin objects for the transaction
+      // For SUI, we can use gas coin splitting
+      let coinA: any;
+      let coinB: any;
+      
+      if (coinTypeA === '0x2::sui::SUI') {
+        // Use gas coin for SUI
+        coinA = txb.splitCoins(txb.gas, [amountABigInt]);
+      } else {
+        // For other coins, merge all coins first, then split
+        const primaryCoinA = txb.object(coinObjectsA[0].coinObjectId);
+        if (coinObjectsA.length > 1) {
+          const otherCoinsA = coinObjectsA.slice(1).map((c: any) => txb.object(c.coinObjectId));
+          txb.mergeCoins(primaryCoinA, otherCoinsA);
+        }
+        coinA = txb.splitCoins(primaryCoinA, [amountABigInt]);
+      }
+      
+      if (coinTypeB === '0x2::sui::SUI') {
+        // Use gas coin for SUI (if both are SUI, this won't work - but that's not a valid pool)
+        coinB = txb.splitCoins(txb.gas, [amountBBigInt]);
+      } else {
+        // For other coins, merge all coins first, then split
+        const primaryCoinB = txb.object(coinObjectsB[0].coinObjectId);
+        if (coinObjectsB.length > 1) {
+          const otherCoinsB = coinObjectsB.slice(1).map((c: any) => txb.object(c.coinObjectId));
+          txb.mergeCoins(primaryCoinB, otherCoinsB);
+        }
+        coinB = txb.splitCoins(primaryCoinB, [amountBBigInt]);
+      }
+      
+      // Calculate slippage sqrt price (optional parameter)
+      // slippage_sqrt_price = current_sqrt_price * (1 + slippage) for upper, (1 - slippage) for lower
+      // For simplicity, we'll pass None (null) and let Cetus handle slippage
+      const slippageSqrtPrice = null; // Option<U256> - None
+      
+      // Build the Move call to open_position
+      // Function signature: open_position<CoinTypeA, CoinTypeB>(
       //   pool: &Pool<CoinTypeA, CoinTypeB>,
       //   tick_lower: I32,
       //   tick_upper: I32,
-      //   amount_a: u64,
-      //   amount_b: u64,
+      //   coin_a: Coin<CoinTypeA>,
+      //   coin_b: Coin<CoinTypeB>,
       //   slippage_sqrt_price: Option<U256>,
       //   ctx: &mut TxContext
-      // )
+      // ) -> PositionNFT
+      txb.moveCall({
+        target: `${CETUS_PACKAGE}::clmm::open_position`,
+        typeArguments: [coinTypeA, coinTypeB],
+        arguments: [
+          poolObj,
+          txb.pure.u32(tickLower), // I32 as u32
+          txb.pure.u32(tickUpper), // I32 as u32
+          coinA,
+          coinB,
+          slippageSqrtPrice ? txb.pure.u256(slippageSqrtPrice) : txb.pure.option('u256', null),
+        ],
+      });
       
-      // For now, we need to get the coin types from the pool
-      // This is a simplified version - in production you'd need to:
-      // 1. Get pool object to extract coin types
-      // 2. Get coin objects for amountA and amountB
-      // 3. Build the Move call with proper type parameters
+      Logger.info('Manual position transaction built successfully', {
+        poolAddress,
+        coinTypeA,
+        coinTypeB,
+        tickLower,
+        tickUpper,
+      });
       
-      // Since we don't have the coin types readily available, we'll throw a helpful error
-      throw new Error(
-        'Manual position creation requires pool coin types. ' +
-        'Please ensure Cetus SDK is properly initialized or provide coin types. ' +
-        'SDK Position module appears to be empty - check SDK version compatibility.'
-      );
-      
+      return txb;
     } catch (error: any) {
       Logger.error('Manual position transaction building failed', error);
       throw new Error(
         `Failed to create position transaction manually: ${error.message}. ` +
-        `SDK Position module has no methods available. Please check Cetus SDK installation and version.`
+        `Please check wallet balances and coin types.`
       );
     }
   }

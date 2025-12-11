@@ -116,7 +116,9 @@ export class PositionManager {
         tickUpper,
         amountA,
         amountB,
-        config.maxSlippageBps / 100
+        config.maxSlippageBps / 100,
+        config.tokenA.address,
+        config.tokenB.address
       );
 
       // Simulate transaction first to check for errors

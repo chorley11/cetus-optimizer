@@ -37,7 +37,7 @@ class CetusOptimizer {
     const suiClient = new SuiClient({ url: rpcUrl });
     
             this.suiService = new SuiService();
-            this.cetusService = new CetusService(suiClient, (process.env.SUI_NETWORK as 'mainnet' | 'testnet') || 'mainnet');
+            this.cetusService = new CetusService(suiClient, (process.env.SUI_NETWORK as 'mainnet' | 'testnet') || 'mainnet', this.suiService);
             const pythService = new PythService(suiClient);
             this.db = new DatabaseService();
     this.telegram = new TelegramService(
