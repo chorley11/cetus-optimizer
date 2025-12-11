@@ -5,6 +5,7 @@ import { Logger } from '../utils/logger';
 export class TelegramService {
   private bot: TelegramBot | null = null;
   private chatId: string;
+  private alertsPaused: boolean = false;
 
   constructor(token: string, chatId: string) {
     this.chatId = chatId;
@@ -26,9 +27,15 @@ export class TelegramService {
     }
   }
 
-  async sendMessage(text: string): Promise<void> {
+  async sendMessage(text: string, force: boolean = false): Promise<void> {
     if (!this.bot) {
       Logger.warn('Telegram bot not initialized, message not sent', { text });
+      return;
+    }
+
+    // Skip alerts if paused (unless forced, e.g., for command responses)
+    if (this.alertsPaused && !force) {
+      Logger.debug('Alerts paused, skipping message', { text: text.substring(0, 50) });
       return;
     }
 
@@ -37,6 +44,20 @@ export class TelegramService {
     } catch (error) {
       Logger.error('Failed to send Telegram message', error);
     }
+  }
+
+  pauseAlerts(): void {
+    this.alertsPaused = true;
+    Logger.info('Telegram alerts paused');
+  }
+
+  resumeAlerts(): void {
+    this.alertsPaused = false;
+    Logger.info('Telegram alerts resumed');
+  }
+
+  isAlertsPaused(): boolean {
+    return this.alertsPaused;
   }
 
   async sendRebalanceAlert(rebalance: Rebalance, poolName: string): Promise<void> {
@@ -194,6 +215,8 @@ Reply /pools for detailed view`;
     this.bot.onText(/\/rebalance (.+)/, handlers.rebalance || (() => Promise.resolve()));
     this.bot.onText(/\/withdraw (.+)/, handlers.withdraw || (() => Promise.resolve()));
     this.bot.onText(/\/deposited/, handlers.deposited || (() => Promise.resolve()));
+    this.bot.onText(/\/pausealerts/, handlers.pausealerts || (() => Promise.resolve()));
+    this.bot.onText(/\/resumealerts/, handlers.resumealerts || (() => Promise.resolve()));
     this.bot.onText(/\/help/, handlers.help || (() => Promise.resolve()));
   }
 }
