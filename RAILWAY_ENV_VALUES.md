@@ -16,7 +16,7 @@ MAIN_WALLET_PRIVATE_KEY=suiprivkey1qph7qn7654k76hh3mdcg77wkefhaefzqwjt2fmzm7gemz
 ```
 
 ```
-SKIM_WALLET_ADDRESS=0x18197fc88dcbce6c5bd457c51beeb1ddcd151c385a295dbb3c0fb18
+SKIM_WALLET_ADDRESS=0x18197fc88dcbce6c5bd18ceb5d782ba0eb8a17f43f26616841a9166c9802ca44
 ```
 
 ### Telegram Configuration
