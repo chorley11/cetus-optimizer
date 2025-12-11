@@ -38,10 +38,25 @@ export class PriceMonitor {
         Logger.debug(`Fetching price from Pyth for ${poolConfig.name}`);
         price = await this.pythService.getPoolPrice(poolConfig.name);
         Logger.debug(`Got price from Pyth for ${poolConfig.name}: ${price}`);
-      } catch (error) {
-        Logger.warn(`Pyth price fetch failed for ${poolConfig.name}, falling back to Cetus`, error);
+      } catch (error: any) {
+        // Check if error indicates feed doesn't exist (expected for DEEP/SUI, WAL/SUI)
+        const isFeedNotAvailable = error.message?.includes('not available') || 
+                                   error.message?.includes('does not exist') ||
+                                   error.message?.includes('Bad Request');
+        
+        if (isFeedNotAvailable) {
+          Logger.debug(`Pyth feed not available for ${poolConfig.name}, using Cetus (expected for some pools)`);
+        } else {
+          Logger.warn(`Pyth price fetch failed for ${poolConfig.name}, falling back to Cetus`, error);
+        }
+        
         // Fallback to Cetus
-        price = await this.fetchPriceFromCetus(poolConfig);
+        try {
+          price = await this.fetchPriceFromCetus(poolConfig);
+        } catch (cetusError) {
+          Logger.error(`Both Pyth and Cetus failed for ${poolConfig.name}`, { pythError: error, cetusError });
+          throw new Error(`Failed to fetch price for ${poolConfig.name} from both Pyth and Cetus`);
+        }
       }
     } else {
       // Use Cetus (original method)
