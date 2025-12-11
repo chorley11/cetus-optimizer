@@ -1,5 +1,6 @@
 import { CetusClmmSDK } from '@cetusprotocol/cetus-sui-clmm-sdk';
 import { SuiClient } from '@mysten/sui/client';
+import { Transaction } from '@mysten/sui/transactions';
 import { PoolConfig } from '../types';
 import { Logger } from '../utils/logger';
 import { retryWithBackoff } from '../utils/retry';
