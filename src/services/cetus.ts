@@ -38,44 +38,49 @@ export class CetusService {
     
     try {
       // Primary method: Initialize with both client and fullNodeUrl
-      // The SDK should use the client we provide, but we also set fullNodeUrl as backup
+      // IMPORTANT: Ensure the SuiClient we pass has the URL properly set
+      // The SDK may create its own client, so we need to ensure fullNodeUrl is set
       this.sdk = new CetusClmmSDK({
         network,
         fullNodeUrl: rpcUrl,
         client: suiClient,
       } as any);
       
-      Logger.info('Cetus SDK initialized successfully with client and fullNodeUrl');
+      Logger.info('Cetus SDK initialized successfully with client and fullNodeUrl', { rpcUrl });
       
       // Immediately patch the SDK's internal client to ensure URL is set
       const sdkAny = this.sdk as any;
-      if (sdkAny.client) {
-        if (!sdkAny.client.url) {
-          sdkAny.client.url = rpcUrl;
-        }
-        // Patch transport layer
-        if (sdkAny.client.transport && !sdkAny.client.transport.url) {
-          sdkAny.client.transport.url = rpcUrl;
-        }
-      }
-      if (sdkAny.suiClient) {
-        if (!sdkAny.suiClient.url) {
-          sdkAny.suiClient.url = rpcUrl;
-        }
-        if (sdkAny.suiClient.transport && !sdkAny.suiClient.transport.url) {
-          sdkAny.suiClient.transport.url = rpcUrl;
+      
+      // Patch all possible client locations
+      const clients = [
+        sdkAny.client,
+        sdkAny.suiClient,
+        sdkAny.Pool?.client,
+        sdkAny.Pool?.suiClient,
+      ].filter(Boolean);
+      
+      for (const client of clients) {
+        if (client) {
+          if (!client.url) client.url = rpcUrl;
+          if (!client.fullNodeUrl) client.fullNodeUrl = rpcUrl;
+          
+          // Patch transport - this is critical
+          if (client.transport) {
+            if (!client.transport.url) client.transport.url = rpcUrl;
+            if (!client.transport.fullNodeUrl) client.transport.fullNodeUrl = rpcUrl;
+          }
+          
+          // Some SDKs store transport in a different location
+          if (client.rpc?.transport) {
+            if (!client.rpc.transport.url) client.rpc.transport.url = rpcUrl;
+          }
         }
       }
       
-      // Also try to patch Pool module's client if it has one
-      if (sdkAny.Pool && sdkAny.Pool.client) {
-        if (!sdkAny.Pool.client.url) {
-          sdkAny.Pool.client.url = rpcUrl;
-        }
-        if (sdkAny.Pool.client.transport && !sdkAny.Pool.client.transport.url) {
-          sdkAny.Pool.client.transport.url = rpcUrl;
-        }
-      }
+      Logger.info('Cetus SDK client patching completed', { 
+        clientCount: clients.length,
+        hasPoolClient: !!sdkAny.Pool?.client 
+      });
       
     } catch (error) {
       Logger.error('Failed to initialize Cetus SDK with client and fullNodeUrl, trying fullNodeUrl only', error);
