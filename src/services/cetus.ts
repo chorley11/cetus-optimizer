@@ -31,38 +31,84 @@ export class CetusService {
     
     Logger.info('Initializing Cetus SDK', { network, rpcUrl });
     
+    // Ensure the passed SuiClient has the URL set
+    if (!(suiClient as any).url) {
+      (suiClient as any).url = rpcUrl;
+    }
+    
     try {
-      // Primary method: Initialize with explicit fullNodeUrl
-      // This ensures the SDK's internal client has the RPC URL
+      // Primary method: Initialize with both client and fullNodeUrl
+      // The SDK should use the client we provide, but we also set fullNodeUrl as backup
       this.sdk = new CetusClmmSDK({
         network,
         fullNodeUrl: rpcUrl,
+        client: suiClient,
       } as any);
       
-      Logger.info('Cetus SDK initialized successfully with fullNodeUrl');
-    } catch (error) {
-      Logger.error('Failed to initialize Cetus SDK with fullNodeUrl, trying alternative methods', error);
+      Logger.info('Cetus SDK initialized successfully with client and fullNodeUrl');
       
-      // Fallback 1: Try with client (but SDK may not use it properly)
+      // Immediately patch the SDK's internal client to ensure URL is set
+      const sdkAny = this.sdk as any;
+      if (sdkAny.client) {
+        if (!sdkAny.client.url) {
+          sdkAny.client.url = rpcUrl;
+        }
+        // Patch transport layer
+        if (sdkAny.client.transport && !sdkAny.client.transport.url) {
+          sdkAny.client.transport.url = rpcUrl;
+        }
+      }
+      if (sdkAny.suiClient) {
+        if (!sdkAny.suiClient.url) {
+          sdkAny.suiClient.url = rpcUrl;
+        }
+        if (sdkAny.suiClient.transport && !sdkAny.suiClient.transport.url) {
+          sdkAny.suiClient.transport.url = rpcUrl;
+        }
+      }
+      
+      // Also try to patch Pool module's client if it has one
+      if (sdkAny.Pool && sdkAny.Pool.client) {
+        if (!sdkAny.Pool.client.url) {
+          sdkAny.Pool.client.url = rpcUrl;
+        }
+        if (sdkAny.Pool.client.transport && !sdkAny.Pool.client.transport.url) {
+          sdkAny.Pool.client.transport.url = rpcUrl;
+        }
+      }
+      
+    } catch (error) {
+      Logger.error('Failed to initialize Cetus SDK with client and fullNodeUrl, trying fullNodeUrl only', error);
+      
+      // Fallback 1: Try with fullNodeUrl only
       try {
-        // Create a new client with explicit URL to ensure it's set
-        const clientWithUrl = new SuiClient({ url: rpcUrl });
         this.sdk = new CetusClmmSDK({
-          client: clientWithUrl,
           network,
+          fullNodeUrl: rpcUrl,
         } as any);
         
-        Logger.info('Cetus SDK initialized with client fallback');
-      } catch (fallbackError) {
-        Logger.error('Failed to initialize Cetus SDK with client, using network only', fallbackError);
+        Logger.info('Cetus SDK initialized with fullNodeUrl only');
         
-        // Last resort: use network only (SDK will use its default RPC)
-        // This may not work if SDK defaults don't match our RPC
+        // Patch after initialization
+        const sdkAny = this.sdk as any;
+        if (sdkAny.client && !sdkAny.client.url) {
+          sdkAny.client.url = rpcUrl;
+        }
+        if (sdkAny.Pool && sdkAny.Pool.client && !sdkAny.Pool.client.url) {
+          sdkAny.Pool.client.url = rpcUrl;
+        }
+      } catch (fallbackError) {
+        Logger.error('Failed to initialize Cetus SDK with fullNodeUrl, trying client only', fallbackError);
+        
+        // Fallback 2: Try with client only
         try {
+          const clientWithUrl = new SuiClient({ url: rpcUrl });
           this.sdk = new CetusClmmSDK({
+            client: clientWithUrl,
             network,
           } as any);
-          Logger.warn('Cetus SDK initialized with network only - RPC URL may not match');
+          
+          Logger.info('Cetus SDK initialized with client only');
         } catch (finalError) {
           Logger.error('Failed to initialize Cetus SDK with all methods', finalError);
           throw new Error(`Failed to initialize Cetus SDK: ${finalError instanceof Error ? finalError.message : String(finalError)}`);
@@ -72,10 +118,13 @@ export class CetusService {
     
     // Verify SDK has access to RPC by checking if it has a client
     try {
-      const sdkClient = (this.sdk as any).client || (this.sdk as any).suiClient;
+      const sdkAny = this.sdk as any;
+      const sdkClient = sdkAny.client || sdkAny.suiClient || (sdkAny.Pool && sdkAny.Pool.client);
       if (sdkClient) {
-        const clientUrl = (sdkClient as any).url || (sdkClient as any).fullNodeUrl;
-        Logger.info('Cetus SDK client URL', { url: clientUrl || 'not found' });
+        const clientUrl = sdkClient.url || sdkClient.fullNodeUrl || (sdkClient.transport && sdkClient.transport.url);
+        Logger.info('Cetus SDK client URL verified', { url: clientUrl || 'not found' });
+      } else {
+        Logger.warn('Cetus SDK client not found - may have RPC issues');
       }
     } catch (error) {
       Logger.warn('Could not verify Cetus SDK client URL', error);
