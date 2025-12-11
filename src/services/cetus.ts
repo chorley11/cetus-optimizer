@@ -194,6 +194,39 @@ export class CetusService {
         }
       }
       
+      // Final attempt: directly patch the Pool module's internal client before calling
+      // The SDK may create a new client instance, so we need to patch it right before use
+      const poolModule = sdkAny.Pool;
+      if (poolModule) {
+        // Try to get the actual client used by Pool.getPool
+        const poolClient = poolModule.client || poolModule.suiClient || poolModule._client;
+        if (poolClient) {
+          // Force set URL on all possible properties
+          poolClient.url = rpcUrl;
+          poolClient.fullNodeUrl = rpcUrl;
+          
+          // Patch transport aggressively
+          if (poolClient.transport) {
+            poolClient.transport.url = rpcUrl;
+            poolClient.transport.fullNodeUrl = rpcUrl;
+            // Some transports use _url internally
+            (poolClient.transport as any)._url = rpcUrl;
+          }
+          
+          // Patch RPC if it exists
+          if (poolClient.rpc?.transport) {
+            poolClient.rpc.transport.url = rpcUrl;
+            (poolClient.rpc.transport as any)._url = rpcUrl;
+          }
+        }
+        
+        // Also try to patch the module's RPC directly
+        if (poolModule.rpc?.transport) {
+          poolModule.rpc.transport.url = rpcUrl;
+          (poolModule.rpc.transport as any)._url = rpcUrl;
+        }
+      }
+      
       const pool = await this.sdk.Pool.getPool(poolAddress);
       
       // Calculate current price from sqrt price

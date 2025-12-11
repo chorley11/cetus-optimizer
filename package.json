@@ -11,6 +11,7 @@
     "verify": "ts-node scripts/verify-deployment.ts",
     "trades": "ts-node scripts/view-trades.ts",
     "check-env": "ts-node scripts/check-env.ts",
+    "check-prices": "ts-node scripts/check-prices.ts",
     "diagnose": "ts-node scripts/diagnose-wallet.ts",
     "open-position": "ts-node scripts/open-position.ts",
     "healthcheck": "node -e \"require('fs').existsSync('data/optimizer.db') && process.exit(0) || process.exit(1)\""
