@@ -2,7 +2,7 @@
 
 Automated liquidity management system for Cetus DEX on Sui blockchain that maximizes APY through tight concentrated liquidity bands (±2%), with profit skimming to accumulate USDC/SUI for subsequent Bluefin lending deployment.
 
-[![CI/CD Pipeline](https://github.com/YOUR_USERNAME/cetus-optimizer/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/cetus-optimizer/actions)
+[![CI/CD Pipeline](https://github.com/chorley11/cetus-optimizer/actions/workflows/ci.yml/badge.svg)](https://github.com/chorley11/cetus-optimizer/actions)
 [![Deployment Status](https://img.shields.io/badge/deployment-ready-green)](https://railway.app)
 
 ## Features
@@ -25,7 +25,7 @@ Automated liquidity management system for Cetus DEX on Sui blockchain that maxim
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/cetus-optimizer.git
+git clone https://github.com/chorley11/cetus-optimizer.git
 cd cetus-optimizer
 ```
 
