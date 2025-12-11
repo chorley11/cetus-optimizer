@@ -26,7 +26,8 @@ export class PriceMonitor {
   async fetchPrice(poolConfig: PoolConfig): Promise<PriceSnapshot> {
     // Validate pool address before attempting to fetch
     if (!poolConfig.address || poolConfig.address.trim() === '' || poolConfig.address === '0x') {
-      throw new Error(`Pool ${poolConfig.name} has invalid address: "${poolConfig.address}" - Check POOL_${poolConfig.name} environment variable`);
+      const envVarName = `POOL_${poolConfig.name.replace('/', '_').toUpperCase()}`;
+      throw new Error(`Pool ${poolConfig.name} has invalid address: "${poolConfig.address}" - Check ${envVarName} environment variable`);
     }
     
     try {
