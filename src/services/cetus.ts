@@ -25,23 +25,33 @@ export class CetusService {
   private sdk: CetusClmmSDK;
 
   constructor(suiClient: SuiClient, network: 'mainnet' | 'testnet' = 'mainnet') {
-    // Cetus SDK initialization - need to pass RPC URL explicitly
-    const rpcUrl = (suiClient as any).url || process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
+    // Cetus SDK initialization
+    // The SDK needs both network and either fullNodeUrl or a properly configured client
+    const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
+    
+    // Ensure the SuiClient has the URL set
+    if (!(suiClient as any).url) {
+      (suiClient as any).url = rpcUrl;
+    }
     
     try {
-      // Try with explicit RPC URL first
+      // Try initializing with both client and fullNodeUrl to ensure RPC is available
       this.sdk = new CetusClmmSDK({
         network,
         fullNodeUrl: rpcUrl,
+        client: suiClient,
       } as any);
     } catch (error) {
-      // Fallback: try with client
+      Logger.error('Failed to initialize Cetus SDK, trying client only', error);
+      // Fallback: try with client only
       try {
         this.sdk = new CetusClmmSDK({
           client: suiClient,
+          network,
         } as any);
       } catch (fallbackError) {
-        // Last resort: use network only
+        Logger.error('Failed to initialize Cetus SDK, using network only', fallbackError);
+        // Last resort: use network only (SDK will use default RPC)
         this.sdk = new CetusClmmSDK({
           network,
         } as any);
