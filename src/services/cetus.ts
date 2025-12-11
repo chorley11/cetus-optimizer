@@ -255,6 +255,42 @@ export class CetusService {
   }
 
   /**
+   * Patch SDK client with RPC URL before making SDK calls
+   * This should be called before any SDK operation
+   */
+  private patchSdkClient(): void {
+    const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
+    const sdkAny = this.sdk as any;
+    
+    const clientsToPatch = [
+      sdkAny.client,
+      sdkAny.suiClient,
+      sdkAny.Position?.client,
+      sdkAny.Position?.suiClient,
+      sdkAny.Pool?.client,
+      sdkAny.Pool?.suiClient,
+      sdkAny.Swap?.client,
+      sdkAny.Swap?.suiClient,
+    ].filter(Boolean);
+    
+    for (const client of clientsToPatch) {
+      if (client) {
+        client.url = rpcUrl;
+        client.fullNodeUrl = rpcUrl;
+        if (client.transport) {
+          client.transport.url = rpcUrl;
+          client.transport.fullNodeUrl = rpcUrl;
+          (client.transport as any)._url = rpcUrl;
+        }
+        if (client.rpc?.transport) {
+          client.rpc.transport.url = rpcUrl;
+          (client.rpc.transport as any)._url = rpcUrl;
+        }
+      }
+    }
+  }
+
+  /**
    * Get pool info directly from Sui RPC, bypassing SDK
    * This is a fallback when SDK has RPC URL issues
    */
