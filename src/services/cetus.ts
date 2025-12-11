@@ -496,7 +496,9 @@ export class CetusService {
             tickUpper,
             amountA,
             amountB,
-            slippage
+            slippage,
+            coinTypeA,
+            coinTypeB
           );
         }
       } catch (error: any) {
