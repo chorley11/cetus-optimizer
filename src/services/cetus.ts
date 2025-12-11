@@ -352,33 +352,37 @@ export class CetusService {
     slippage: number = 0.5
   ) {
     return retryWithBackoff(async () => {
+      // Patch SDK client before making position calls
+      this.patchSdkClient();
+      
       // Try different API method names
       const positionModule = this.sdk.Position as any;
       
-      if (positionModule.createPositionTx) {
-        return await positionModule.createPositionTx({
-          poolId: poolAddress,
-          tickLower,
-          tickUpper,
-          amountA,
-          amountB,
-          slippage,
-        });
-      } else if (positionModule.createPosition) {
-        return await positionModule.createPosition({
-          poolId: poolAddress,
-          tickLower,
-          tickUpper,
-          amountA,
-          amountB,
-          slippage,
-        });
-      } else {
-        // Fallback: create transaction manually
-        const { Transaction } = require('@mysten/sui/transactions');
-        const txb = new Transaction();
-        // This would need actual SDK method - placeholder for now
-        throw new Error('Position creation method not found in SDK');
+      try {
+        if (positionModule.createPositionTx) {
+          return await positionModule.createPositionTx({
+            poolId: poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage,
+          });
+        } else if (positionModule.createPosition) {
+          return await positionModule.createPosition({
+            poolId: poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage,
+          });
+        } else {
+          throw new Error('Position creation method not found in SDK');
+        }
+      } catch (error: any) {
+        Logger.error('SDK createPositionTx failed, RPC URL may still be missing', { error: error.message });
+        throw error;
       }
     });
   }
@@ -388,6 +392,9 @@ export class CetusService {
     collectFee: boolean = true
   ) {
     return retryWithBackoff(async () => {
+      // Patch SDK client before position operations
+      this.patchSdkClient();
+      
       const positionModule = this.sdk.Position as any;
       
       if (positionModule.closePositionTx) {
@@ -408,6 +415,9 @@ export class CetusService {
 
   async collectFeesTx(positionId: string) {
     return retryWithBackoff(async () => {
+      // Patch SDK client before position operations
+      this.patchSdkClient();
+      
       const positionModule = this.sdk.Position as any;
       
       if (positionModule.collectFeeTx) {
