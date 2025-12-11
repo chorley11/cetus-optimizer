@@ -229,11 +229,18 @@ export class CetusService {
         }
       }
       
-      const pool = await this.sdk.Pool.getPool(poolAddress);
+      // Try SDK first, fallback to direct RPC if SDK fails
+      let pool: any;
+      try {
+        pool = await this.sdk.Pool.getPool(poolAddress);
+      } catch (sdkError: any) {
+        Logger.warn(`SDK getPool failed for ${poolAddress}, using direct RPC`, { error: sdkError.message });
+        pool = await this.getPoolDirect(poolAddress);
+      }
       
       // Calculate current price from sqrt price
       // price = (sqrtPrice / 2^96)^2
-      const sqrtPrice = BigInt(pool.current_sqrt_price);
+      const sqrtPrice = BigInt(pool.current_sqrt_price || pool.currentSqrtPrice || '0');
       const Q96 = BigInt(2) ** BigInt(96);
       const price = Number(sqrtPrice * sqrtPrice) / Number(Q96 * Q96);
       
