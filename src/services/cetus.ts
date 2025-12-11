@@ -94,6 +94,29 @@ export class CetusService {
     }
     
     return retryWithBackoff(async () => {
+      // Ensure SDK client has RPC URL before making request
+      const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
+      const sdkAny = this.sdk as any;
+      
+      // Try to patch the SDK's internal client/transport with RPC URL
+      if (sdkAny.client) {
+        if (!sdkAny.client.url) {
+          sdkAny.client.url = rpcUrl;
+        }
+        // Also check transport layer
+        if (sdkAny.client.transport && !sdkAny.client.transport.url) {
+          sdkAny.client.transport.url = rpcUrl;
+        }
+      }
+      if (sdkAny.suiClient) {
+        if (!sdkAny.suiClient.url) {
+          sdkAny.suiClient.url = rpcUrl;
+        }
+        if (sdkAny.suiClient.transport && !sdkAny.suiClient.transport.url) {
+          sdkAny.suiClient.transport.url = rpcUrl;
+        }
+      }
+      
       const pool = await this.sdk.Pool.getPool(poolAddress);
       
       // Calculate current price from sqrt price
