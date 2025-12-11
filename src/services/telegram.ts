@@ -9,8 +9,18 @@ export class TelegramService {
   constructor(token: string, chatId: string) {
     this.chatId = chatId;
     try {
-      this.bot = new TelegramBot(token);
-      Logger.info('Telegram bot initialized');
+      this.bot = new TelegramBot(token, { polling: true });
+      Logger.info('Telegram bot initialized with polling enabled');
+      
+      // Handle errors
+      this.bot.on('polling_error', (error) => {
+        Logger.error('Telegram polling error', error);
+      });
+      
+      // Log when bot is ready
+      this.bot.on('message', (msg) => {
+        Logger.debug('Received Telegram message', { from: msg.from?.username, text: msg.text });
+      });
     } catch (error) {
       Logger.error('Failed to initialize Telegram bot', error);
     }

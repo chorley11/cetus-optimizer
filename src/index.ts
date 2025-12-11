@@ -262,9 +262,31 @@ class CetusOptimizer {
         await this.telegram.sendStatusUpdate(metrics, uptime);
       },
       pools: async (msg) => {
-        // Detailed pool metrics
         const metrics = await this.getPoolMetrics();
-        // Send detailed view
+        let message = `📊 *DETAILED POOL METRICS*\n\n`;
+        
+        for (const metric of metrics) {
+          const pool = POOL_CONFIGS.find(p => p.address === metric.poolAddress);
+          const name = pool?.name || 'Unknown';
+          const position = metric.position;
+          
+          message += `*${name}*\n`;
+          message += `Price: $${metric.currentPrice.toFixed(4)}\n`;
+          message += `In Range: ${metric.inRange ? '✅' : '❌'}\n`;
+          
+          if (position) {
+            message += `Position: ${position.positionId.slice(0, 16)}...\n`;
+            message += `Range: $${position.priceLower.toFixed(4)} - $${position.priceUpper.toFixed(4)}\n`;
+            message += `Value: $${position.entryValueUsd.toFixed(2)}\n`;
+          } else {
+            message += `Position: None\n`;
+          }
+          
+          message += `Rebalances Today: ${metric.todaysRebalances}\n`;
+          message += `Fees Today: $${metric.todaysFees.toFixed(2)}\n\n`;
+        }
+        
+        await this.telegram.sendMessage(message);
       },
       skim: async (msg) => {
         const status = await this.bluefinPipeline.getDepositStatus();
@@ -274,7 +296,7 @@ class CetusOptimizer {
 *SUI:* ${status.suiBalance.toFixed(2)} / ${status.suiThreshold}
 
 ${status.readyForDeposit ? '✅ Ready for Bluefin deposit' : '⏳ Accumulating...'}`;
-        // Send via telegram
+        await this.telegram.sendMessage(message);
       },
       pnl: async (msg) => {
         // Calculate P&L from database
@@ -316,7 +338,7 @@ ${status.readyForDeposit ? '✅ Ready for Bluefin deposit' : '⏳ Accumulating..
 /withdraw [POOL] - Emergency withdraw
 /deposited - Confirm Bluefin deposit
 /help - Show this help`;
-        // Send via telegram
+        await this.telegram.sendMessage(helpText);
       },
     });
   }
