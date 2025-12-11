@@ -15,14 +15,14 @@ Copy and paste these variables one by one:
 
 #### Wallet Configuration
 ```
-MAIN_WALLET_PRIVATE_KEY=suiprivkey1qph7qn7654k76hh3mdcg77wkefhaefzqwjt2fmzm7gemz3asw5dykdkvrpx
-SKIM_WALLET_ADDRESS=0x18197fc88dcbce6c5bd18ceb5d782ba0eb8a17f43f26616841a9166c9802ca44
+MAIN_WALLET_PRIVATE_KEY=suiprivkey1...your_private_key_here...
+SKIM_WALLET_ADDRESS=0x...your_skim_wallet_address...
 ```
 
 #### Telegram Configuration
 ```
-TELEGRAM_BOT_TOKEN=8419537848:AAFVnlMygHSdnawnraldZjdo9i1ROpITbO0
-TELEGRAM_CHAT_ID=1293829515
+TELEGRAM_BOT_TOKEN=1234567890:ABC...your_bot_token_from_BotFather...
+TELEGRAM_CHAT_ID=1234567890
 ```
 
 #### Sui Network
@@ -33,9 +33,9 @@ SUI_NETWORK=mainnet
 
 #### Pool Addresses
 ```
-POOL_SUI_USDC=0x5cf7e2ec9311d9057e43477a29bd457c51beeb1ddcd151c385a295dbb3c0fb18
-POOL_DEEP_SUI=0x51e883ba7c0b566a26cbc8a94cd33eb0abd418a77cc1e60ad22fd9b1f29cd2ab
-POOL_WAL_SUI=0xe01243f37f712ef87e556afb9b1d03d0fae13f96d324ec912daffc339dfdcbd2
+POOL_SUI_USDC=0x...your_sui_usdc_pool_address...
+POOL_DEEP_SUI=0x...your_deep_sui_pool_address...
+POOL_WAL_SUI=0x...your_wal_sui_pool_address...
 ```
 
 #### Optional (with defaults)
@@ -60,15 +60,15 @@ After adding all variables:
 If Railway supports bulk import, you can add all variables:
 
 ```
-MAIN_WALLET_PRIVATE_KEY=suiprivkey1qph7qn7654k76hh3mdcg77wkefhaefzqwjt2fmzm7gemz3asw5dykdkvrpx
-SKIM_WALLET_ADDRESS=0x18197fc88dcbce6c5bd18ceb5d782ba0eb8a17f43f26616841a9166c9802ca44
-TELEGRAM_BOT_TOKEN=8419537848:AAFVnlMygHSdnawnraldZjdo9i1ROpITbO0
-TELEGRAM_CHAT_ID=1293829515
+MAIN_WALLET_PRIVATE_KEY=suiprivkey1...your_private_key_here...
+SKIM_WALLET_ADDRESS=0x...your_skim_wallet_address...
+TELEGRAM_BOT_TOKEN=1234567890:ABC...your_bot_token_from_BotFather...
+TELEGRAM_CHAT_ID=1234567890
 SUI_RPC_URL=https://fullnode.mainnet.sui.io
 SUI_NETWORK=mainnet
-POOL_SUI_USDC=0x5cf7e2ec9311d9057e43477a29bd457c51beeb1ddcd151c385a295dbb3c0fb18
-POOL_DEEP_SUI=0x51e883ba7c0b566a26cbc8a94cd33eb0abd418a77cc1e60ad22fd9b1f29cd2ab
-POOL_WAL_SUI=0xe01243f37f712ef87e556afb9b1d03d0fae13f96d324ec912daffc339dfdcbd2
+POOL_SUI_USDC=0x...your_sui_usdc_pool_address...
+POOL_DEEP_SUI=0x...your_deep_sui_pool_address...
+POOL_WAL_SUI=0x...your_wal_sui_pool_address...
 ```
 
 ## Verification
