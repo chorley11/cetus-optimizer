@@ -42,7 +42,7 @@ async function viewTrades() {
       SELECT 
     WHEN r.pool_address = '0x5cf7e2ec9311d9057e43477a29bd457c51beeb1ddcd151c385a295dbb3c0fb18' THEN 'SUI/USDC'
  WHEN r.pool_address = '0xe01243f37f712ef87e556afb9b1d03d0fae13f96d324ec912daffc339dfdcbd2' THEN 'DEEP/SUI'
- WHEN r.pool_address = '0x51e883ba7c0b566a26cbc8a94cd33eb0abd418a77cc1e60ad22fd9b1f29cd2ab' THEN 'WAL/SUI'
+ WHEN r.pool_address = '0x72f5c6eef73d77de271886219a2543e7c29a33de19a6c69c5cf1899f729c3f17' THEN 'WAL/SUI'
  ELSE r.pool_address
 END as pool_name,
         r.*,
