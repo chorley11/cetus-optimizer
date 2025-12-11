@@ -13,7 +13,7 @@
 ### ✅ Verification Results
 
 1. **Private Key Search:**
-   - ❌ No matches found for: `suiprivkey1qph7qn7654k76hh3mdcg77wkefhaefzqwjt2fmzm7gemz3asw5dykdkvrpx`
+   - ❌ No matches found for old private keys
    - ✅ All files checked: No exposed keys
 
 2. **Telegram Token Search:**
