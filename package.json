@@ -9,6 +9,7 @@
     "dev": "ts-node src/index.ts",
     "db:init": "ts-node scripts/init-db.ts",
     "verify": "ts-node scripts/verify-deployment.ts",
+    "trades": "ts-node scripts/view-trades.ts",
     "healthcheck": "node -e \"require('fs').existsSync('data/optimizer.db') && process.exit(0) || process.exit(1)\""
   },
   "keywords": [
