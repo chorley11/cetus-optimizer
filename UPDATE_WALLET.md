@@ -21,7 +21,7 @@ You need the **private key** (not the address) that corresponds to:
 **Private key format:**
 - Starts with: `suiprivkey1`
 - 64+ characters long
-- Example: `suiprivkey1qph7qn7654k76hh3mdcg77wkefhaefzqwjt2fmzm7gemz3asw5dykdkvrpx`
+- Example: `suiprivkey1...your_private_key_here...` (64+ characters)
 
 ### 2. Update Local Environment (.env file)
 

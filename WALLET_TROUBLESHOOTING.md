@@ -241,7 +241,7 @@ Based on the diagnostic:
 ### Immediate Actions
 
 1. **Add SUI to wallet:**
-   - Transfer at least 1-5 SUI to: `0x18197fc88dcbce6c5bd18ceb5d782ba0eb8a17f43f26616841a9166c9802ca44`
+   - Transfer at least 1-5 SUI to your wallet address (shown in diagnose output)
 
 2. **Fix pool connectivity:**
    - Code fix applied (Cetus SDK initialization)

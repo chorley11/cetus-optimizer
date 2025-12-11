@@ -109,7 +109,7 @@ FROM skim_ledger;
 You can also view your positions directly on Cetus DEX:
 
 1. Go to https://app.cetus.xyz
-2. Connect your wallet (`0x18197fc88dcbce6c5bd18ceb5d782ba0eb8a17f43f26616841a9166c9802ca44`)
+2. Connect your wallet (use your wallet address)
 3. Navigate to "Liquidity" or "Positions"
 4. View all your active LP positions
 
@@ -118,7 +118,7 @@ You can also view your positions directly on Cetus DEX:
 Each rebalance creates a transaction. You can view them on Sui Explorer:
 
 1. Go to https://suiscan.xyz/mainnet
-2. Search for your wallet address: `0x18197fc88dcbce6c5bd18ceb5d782ba0eb8a17f43f26616841a9166c9802ca44`
+2. Search for your wallet address (use your actual wallet address)
 3. View all transactions
 4. Filter by "Cetus" or "CLMM" to see LP-related transactions
 
