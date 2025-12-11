@@ -13,14 +13,17 @@ RUN apk add --no-cache \
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install ALL dependencies (including dev dependencies needed for build)
+RUN npm ci
 
 # Copy source code
 COPY src/ ./src/
 
 # Build TypeScript
 RUN npm run build
+
+# Remove dev dependencies after build to reduce image size
+RUN npm prune --omit=dev
 
 # Create data directory for SQLite
 RUN mkdir -p data logs
