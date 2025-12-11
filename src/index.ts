@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { SuiClient } from '@mysten/sui/client';
 import { SuiService } from './services/sui';
 import { CetusService } from './services/cetus';
+import { PythService } from './services/pyth';
 import { DatabaseService } from './services/database';
 import { TelegramService } from './services/telegram';
 import { PriceMonitor } from './core/priceMonitor';
@@ -35,16 +36,17 @@ class CetusOptimizer {
     const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
     const suiClient = new SuiClient({ url: rpcUrl });
     
-    this.suiService = new SuiService();
-    this.cetusService = new CetusService(suiClient, (process.env.SUI_NETWORK as 'mainnet' | 'testnet') || 'mainnet');
-    this.db = new DatabaseService();
+            this.suiService = new SuiService();
+            this.cetusService = new CetusService(suiClient, (process.env.SUI_NETWORK as 'mainnet' | 'testnet') || 'mainnet');
+            const pythService = new PythService(suiClient);
+            this.db = new DatabaseService();
     this.telegram = new TelegramService(
       process.env.TELEGRAM_BOT_TOKEN || '',
       process.env.TELEGRAM_CHAT_ID || ''
     );
     
-    // Initialize core components
-    this.priceMonitor = new PriceMonitor(this.cetusService, this.db);
+            // Initialize core components
+            this.priceMonitor = new PriceMonitor(this.cetusService, this.db, pythService);
     this.strategyEngine = new StrategyEngine();
     this.positionManager = new PositionManager(
       this.cetusService,

@@ -1,4 +1,5 @@
 import { CetusService, PoolInfo } from '../services/cetus';
+import { PythService } from '../services/pyth';
 import { PoolConfig } from '../types';
 import { DatabaseService } from '../services/database';
 import { Logger } from '../utils/logger';
@@ -15,68 +16,89 @@ export interface PriceSnapshot {
 
 export class PriceMonitor {
   private cetusService: CetusService;
+  private pythService?: PythService;
   private db: DatabaseService;
   private priceCache: Map<string, PriceSnapshot> = new Map();
+  private usePyth: boolean;
 
-  constructor(cetusService: CetusService, db: DatabaseService) {
+  constructor(cetusService: CetusService, db: DatabaseService, pythService?: PythService) {
     this.cetusService = cetusService;
+    this.pythService = pythService;
     this.db = db;
+    // Use Pyth if available, otherwise fallback to Cetus
+    this.usePyth = !!pythService && (process.env.USE_PYTH_PRICES === 'true');
   }
 
   async fetchPrice(poolConfig: PoolConfig): Promise<PriceSnapshot> {
+    let price: number;
+    
+    // Try Pyth first if enabled, otherwise use Cetus
+    if (this.usePyth && this.pythService) {
+      try {
+        Logger.debug(`Fetching price from Pyth for ${poolConfig.name}`);
+        price = await this.pythService.getPoolPrice(poolConfig.name);
+        Logger.debug(`Got price from Pyth for ${poolConfig.name}: ${price}`);
+      } catch (error) {
+        Logger.warn(`Pyth price fetch failed for ${poolConfig.name}, falling back to Cetus`, error);
+        // Fallback to Cetus
+        price = await this.fetchPriceFromCetus(poolConfig);
+      }
+    } else {
+      // Use Cetus (original method)
+      price = await this.fetchPriceFromCetus(poolConfig);
+    }
+    
+    // Get active position to check if in range
+    const position = this.db.getActivePosition(poolConfig.address);
+    
+    let inRange = false;
+    let distanceToLower = 0;
+    let distanceToUpper = 0;
+
+    if (position) {
+      inRange = isInRange(price, position.priceLower, position.priceUpper);
+      const distances = calculateRangeDistances(
+        price,
+        position.priceLower,
+        position.priceUpper
+      );
+      distanceToLower = distances.distanceToLower;
+      distanceToUpper = distances.distanceToUpper;
+    }
+
+    const snapshot: PriceSnapshot = {
+      poolAddress: poolConfig.address,
+      price,
+      inRange,
+      distanceToLower,
+      distanceToUpper,
+      timestamp: new Date(),
+    };
+
+    // Cache the snapshot
+    this.priceCache.set(poolConfig.address, snapshot);
+
+    // Record in database
+    this.db.recordPriceSnapshot(
+      poolConfig.address,
+      price,
+      inRange,
+      distanceToLower,
+      distanceToUpper
+    );
+
+    return snapshot;
+  }
+
+  private async fetchPriceFromCetus(poolConfig: PoolConfig): Promise<number> {
     // Validate pool address before attempting to fetch
     if (!poolConfig.address || poolConfig.address.trim() === '' || poolConfig.address === '0x') {
       const envVarName = `POOL_${poolConfig.name.replace('/', '_').toUpperCase()}`;
       throw new Error(`Pool ${poolConfig.name} has invalid address: "${poolConfig.address}" - Check ${envVarName} environment variable`);
     }
     
-    try {
-      const poolInfo = await this.cetusService.getPoolInfo(poolConfig.address);
-      
-      // Get active position to check if in range
-      const position = this.db.getActivePosition(poolConfig.address);
-      
-      let inRange = false;
-      let distanceToLower = 0;
-      let distanceToUpper = 0;
-
-      if (position) {
-        inRange = isInRange(poolInfo.currentPrice, position.priceLower, position.priceUpper);
-        const distances = calculateRangeDistances(
-          poolInfo.currentPrice,
-          position.priceLower,
-          position.priceUpper
-        );
-        distanceToLower = distances.distanceToLower;
-        distanceToUpper = distances.distanceToUpper;
-      }
-
-      const snapshot: PriceSnapshot = {
-        poolAddress: poolConfig.address,
-        price: poolInfo.currentPrice,
-        inRange,
-        distanceToLower,
-        distanceToUpper,
-        timestamp: new Date(),
-      };
-
-      // Cache the snapshot
-      this.priceCache.set(poolConfig.address, snapshot);
-
-      // Record in database
-      this.db.recordPriceSnapshot(
-        poolConfig.address,
-        poolInfo.currentPrice,
-        inRange,
-        distanceToLower,
-        distanceToUpper
-      );
-
-      return snapshot;
-    } catch (error) {
-      Logger.error(`Failed to fetch price for pool ${poolConfig.name}`, error);
-      throw error;
-    }
+    const poolInfo = await this.cetusService.getPoolInfo(poolConfig.address);
+    return poolInfo.currentPrice;
   }
 
   async fetchPricesForPools(pools: PoolConfig[]): Promise<Map<string, PriceSnapshot>> {
