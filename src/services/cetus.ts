@@ -23,8 +23,10 @@ export interface PositionInfo {
 
 export class CetusService {
   private sdk: CetusClmmSDK;
+  private suiClient: SuiClient;
 
   constructor(suiClient: SuiClient, network: 'mainnet' | 'testnet' = 'mainnet') {
+    this.suiClient = suiClient;
     // Cetus SDK initialization
     // The SDK needs the fullNodeUrl parameter explicitly set
     const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
@@ -241,6 +243,69 @@ export class CetusService {
         currentPrice: price,
         tickSpacing: (pool as any).tickSpacing || (pool as any).tick_spacing || 60,
         feeTier: (pool as any).feeRate || (pool as any).fee_rate || 2500,
+      };
+    });
+  }
+
+  /**
+   * Get pool info directly from Sui RPC, bypassing SDK
+   * This is a fallback when SDK has RPC URL issues
+   */
+  private async getPoolDirect(poolAddress: string): Promise<any> {
+    return retryWithBackoff(async () => {
+      Logger.info(`Fetching pool ${poolAddress} directly from Sui RPC`);
+      
+      // Get the pool object directly
+      const poolObject = await this.suiClient.getObject({
+        id: poolAddress,
+        options: {
+          showContent: true,
+          showType: true,
+        },
+      });
+
+      if (!poolObject.data || !poolObject.data.content) {
+        throw new Error(`Pool object not found at ${poolAddress}`);
+      }
+
+      const content = poolObject.data.content;
+      if (content.dataType !== 'moveObject') {
+        throw new Error(`Invalid pool object type: ${content.dataType}`);
+      }
+
+      const fields = (content as any).fields || {};
+      
+      // Extract pool data - Cetus pools have these fields
+      // The structure may vary, so we try multiple possible field names
+      const sqrtPrice = fields.current_sqrt_price || 
+                       fields.currentSqrtPrice || 
+                       fields.sqrt_price ||
+                       fields.sqrtPrice ||
+                       '0';
+      
+      const tickSpacing = fields.tick_spacing || 
+                         fields.tickSpacing || 
+                         fields.tick_spacing ||
+                         60;
+      
+      const feeRate = fields.fee_rate || 
+                     fields.feeRate || 
+                     fields.fee ||
+                     2500;
+
+      Logger.info(`Successfully fetched pool directly`, {
+        sqrtPrice,
+        tickSpacing,
+        feeRate,
+      });
+
+      return {
+        current_sqrt_price: sqrtPrice,
+        currentSqrtPrice: sqrtPrice,
+        tick_spacing: tickSpacing,
+        tickSpacing: tickSpacing,
+        fee_rate: feeRate,
+        feeRate: feeRate,
       };
     });
   }
