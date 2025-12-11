@@ -60,6 +60,16 @@ export class CetusService {
   }
 
   async getPoolInfo(poolAddress: string): Promise<PoolInfo> {
+    // Validate pool address format
+    if (!poolAddress || poolAddress.trim() === '' || poolAddress === '0x') {
+      throw new Error(`Invalid pool address: "${poolAddress}" - Pool address is empty or not set`);
+    }
+    
+    // Validate Sui address format (should start with 0x and be 64 chars)
+    if (!poolAddress.startsWith('0x') || poolAddress.length < 66) {
+      throw new Error(`Invalid pool address format: "${poolAddress}" - Must start with 0x and be 64+ characters`);
+    }
+    
     return retryWithBackoff(async () => {
       const pool = await this.sdk.Pool.getPool(poolAddress);
       

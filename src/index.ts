@@ -53,9 +53,18 @@ class CetusOptimizer {
     this.skimManager = new SkimManager(this.suiService, this.db, this.telegram);
     this.bluefinPipeline = new BluefinPipeline(this.db, this.telegram);
 
-    // Initialize pool states
+    // Initialize pool states and validate addresses
     POOL_CONFIGS.forEach(pool => {
-      this.poolStates.set(pool.address, { paused: false, consecutiveFailures: 0 });
+      // Validate pool address
+      if (!pool.address || pool.address.trim() === '' || pool.address === '0x') {
+        Logger.warn(`Pool ${pool.name} has invalid address - disabling`, {
+          address: pool.address,
+          envVar: `POOL_${pool.name.replace('/', '_').toUpperCase()}`,
+        });
+        pool.enabled = false; // Disable pools with invalid addresses
+      } else {
+        this.poolStates.set(pool.address, { paused: false, consecutiveFailures: 0 });
+      }
     });
 
     // Setup Telegram commands

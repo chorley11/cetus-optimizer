@@ -24,6 +24,11 @@ export class PriceMonitor {
   }
 
   async fetchPrice(poolConfig: PoolConfig): Promise<PriceSnapshot> {
+    // Validate pool address before attempting to fetch
+    if (!poolConfig.address || poolConfig.address.trim() === '' || poolConfig.address === '0x') {
+      throw new Error(`Pool ${poolConfig.name} has invalid address: "${poolConfig.address}" - Check POOL_${poolConfig.name} environment variable`);
+    }
+    
     try {
       const poolInfo = await this.cetusService.getPoolInfo(poolConfig.address);
       
