@@ -38,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run the application
 CMD ["npm", "start"]
 
-# Dockerfile updated Thu Dec 11 15:32:50 GMT 2025
+# Dockerfile updated Thu Dec 11 17:40:00 GMT 2025 - Force rebuild
