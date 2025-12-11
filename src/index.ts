@@ -432,7 +432,18 @@ ${status.readyForDeposit ? '✅ Ready for Bluefin deposit' : '⏳ Accumulating..
           await this.telegram.sendMessage(`❌ Failed to get wallet balance: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
-      help: async (msg) => {
+      pausealerts: async (msg: TelegramBot.Message) => {
+        this.telegram.pauseAlerts();
+        await this.telegram.sendMessage('🔇 *Alerts Paused*\n\nAll Telegram alerts are now paused. Use /resumealerts to resume.', true);
+        Logger.info('Alerts paused via Telegram command');
+      },
+      resumealerts: async (msg: TelegramBot.Message) => {
+        this.telegram.resumeAlerts();
+        await this.telegram.sendMessage('🔔 *Alerts Resumed*\n\nAll Telegram alerts are now active.', true);
+        Logger.info('Alerts resumed via Telegram command');
+      },
+      help: async (msg: TelegramBot.Message) => {
+        const alertsStatus = this.telegram.isAlertsPaused() ? '🔇 Paused' : '🔔 Active';
         const helpText = `*CETUS OPTIMIZER COMMANDS*
 
 /status - Current status of all pools
@@ -445,8 +456,12 @@ ${status.readyForDeposit ? '✅ Ready for Bluefin deposit' : '⏳ Accumulating..
 /rebalance [POOL] - Force manual rebalance
 /withdraw [POOL] - Emergency withdraw
 /deposited - Confirm Bluefin deposit
-/help - Show this help`;
-        await this.telegram.sendMessage(helpText);
+/pausealerts - Pause all Telegram alerts
+/resumealerts - Resume all Telegram alerts
+/help - Show this help
+
+*Alert Status:* ${alertsStatus}`;
+        await this.telegram.sendMessage(helpText, true);
       },
     });
   }
