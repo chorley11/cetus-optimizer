@@ -395,9 +395,28 @@ export class CetusService {
       const positionModule = this.sdk.Position as any;
       const sdkAny = this.sdk as any;
       
-      // Log available methods for debugging
+      // Log SDK structure for debugging
       const availableMethods = Object.keys(positionModule || {}).filter(k => typeof positionModule[k] === 'function');
-      Logger.debug('Available Position module methods', { methods: availableMethods });
+      const positionModuleKeys = Object.keys(positionModule || {});
+      Logger.debug('SDK Position module structure', { 
+        methods: availableMethods,
+        keys: positionModuleKeys,
+        hasPositionModule: !!positionModule,
+        sdkKeys: Object.keys(sdkAny || {}),
+      });
+      
+      // If Position module is empty or doesn't have methods, build transaction manually
+      if (!positionModule || availableMethods.length === 0) {
+        Logger.warn('SDK Position module has no methods, building transaction manually');
+        return await this.createPositionTxManual(
+          poolAddress,
+          tickLower,
+          tickUpper,
+          amountA,
+          amountB,
+          slippage
+        );
+      }
       
       try {
         // Try multiple possible method names
@@ -462,21 +481,30 @@ export class CetusService {
             slippage,
           });
         } else {
-          // Log SDK structure for debugging
-          Logger.error('Position creation method not found', {
-            positionModuleKeys: Object.keys(positionModule || {}),
-            sdkKeys: Object.keys(sdkAny || {}),
-            availableMethods,
-          });
-          throw new Error(`Position creation method not found in SDK. Available methods: ${availableMethods.join(', ')}`);
+          // Fallback to manual transaction building
+          Logger.warn('No SDK position creation methods found, using manual transaction builder');
+          return await this.createPositionTxManual(
+            poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage
+          );
         }
       } catch (error: any) {
-        Logger.error('SDK createPositionTx failed', { 
+        Logger.error('SDK createPositionTx failed, trying manual builder', { 
           error: error.message,
-          stack: error.stack,
-          availableMethods,
         });
-        throw error;
+        // Fallback to manual transaction building
+        return await this.createPositionTxManual(
+          poolAddress,
+          tickLower,
+          tickUpper,
+          amountA,
+          amountB,
+          slippage
+        );
       }
     });
   }
@@ -708,6 +736,82 @@ export class CetusService {
       
       throw new Error('Zap-in transaction creation not fully implemented - use two-step process');
     });
+  }
+
+  /**
+   * Create position transaction manually using Move calls
+   * This is a fallback when SDK methods are not available
+   */
+  private async createPositionTxManual(
+    poolAddress: string,
+    tickLower: number,
+    tickUpper: number,
+    amountA: string,
+    amountB: string,
+    slippage: number
+  ): Promise<Transaction> {
+    const { Transaction: TransactionBuilder } = require('@mysten/sui/transactions');
+    const txb = new Transaction();
+    
+    // Cetus CLMM package address (mainnet)
+    // This is the published Move package for Cetus Protocol CLMM
+    const CETUS_PACKAGE = process.env.CETUS_PACKAGE || '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb';
+    const CLMM_MODULE = 'clmm';
+    
+    Logger.info('Building position transaction manually using Move calls', {
+      poolAddress,
+      tickLower,
+      tickUpper,
+      amountA,
+      amountB,
+      cetusPackage: CETUS_PACKAGE,
+    });
+    
+    try {
+      // Get pool object
+      const poolObj = txb.object(poolAddress);
+      
+      // Try to use SDK's internal transaction builder if available
+      const sdkAny = this.sdk as any;
+      
+      // Check if SDK has any internal transaction building methods
+      if (sdkAny.utils?.buildTransaction || sdkAny.TransactionBuilder) {
+        Logger.debug('Found SDK transaction builder, attempting to use it');
+        // This would require knowing the SDK's internal structure
+      }
+      
+      // Build transaction using Move call directly
+      // Cetus CLMM open_position function signature:
+      // open_position<CoinTypeA, CoinTypeB>(
+      //   pool: &Pool<CoinTypeA, CoinTypeB>,
+      //   tick_lower: I32,
+      //   tick_upper: I32,
+      //   amount_a: u64,
+      //   amount_b: u64,
+      //   slippage_sqrt_price: Option<U256>,
+      //   ctx: &mut TxContext
+      // )
+      
+      // For now, we need to get the coin types from the pool
+      // This is a simplified version - in production you'd need to:
+      // 1. Get pool object to extract coin types
+      // 2. Get coin objects for amountA and amountB
+      // 3. Build the Move call with proper type parameters
+      
+      // Since we don't have the coin types readily available, we'll throw a helpful error
+      throw new Error(
+        'Manual position creation requires pool coin types. ' +
+        'Please ensure Cetus SDK is properly initialized or provide coin types. ' +
+        'SDK Position module appears to be empty - check SDK version compatibility.'
+      );
+      
+    } catch (error: any) {
+      Logger.error('Manual position transaction building failed', error);
+      throw new Error(
+        `Failed to create position transaction manually: ${error.message}. ` +
+        `SDK Position module has no methods available. Please check Cetus SDK installation and version.`
+      );
+    }
   }
 
   getSDK(): CetusClmmSDK {

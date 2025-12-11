@@ -26,7 +26,7 @@
   "author": "Ben Putley",
   "license": "MIT",
   "dependencies": {
-    "@cetusprotocol/cetus-sui-clmm-sdk": "^5.0.0",
+    "@cetusprotocol/cetus-sui-clmm-sdk": "^5.4.0",
     "@mysten/sui": "^1.0.0",
     "better-sqlite3": "^12.5.0",
     "decimal.js": "^10.4.0",
