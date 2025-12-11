@@ -16,7 +16,7 @@ export class TelegramService {
     }
   }
 
-  private async sendMessage(text: string): Promise<void> {
+  async sendMessage(text: string): Promise<void> {
     if (!this.bot) {
       Logger.warn('Telegram bot not initialized, message not sent', { text });
       return;
@@ -169,6 +169,10 @@ Reply /pools for detailed view`;
 
   setupCommands(handlers: Record<string, (msg: TelegramBot.Message) => Promise<void>>): void {
     if (!this.bot) return;
+
+    this.bot.onText(/\/start/, async (msg: TelegramBot.Message) => {
+      await this.sendMessage('🤖 Cetus Optimizer is running!\n\nUse /help to see all commands.');
+    });
 
     this.bot.onText(/\/status/, handlers.status || (() => Promise.resolve()));
     this.bot.onText(/\/pools/, handlers.pools || (() => Promise.resolve()));

@@ -65,21 +65,22 @@ export class StrategyEngine {
   calculatePositionSize(
     targetUsd: number,
     currentPrice: number,
+    priceLower: number,
+    priceUpper: number,
     tokenADecimals: number,
     tokenBDecimals: number
   ): { amountA: string; amountB: string } {
-    // Simplified calculation - in production, use proper liquidity math
-    // For now, assume 50/50 split
-    const halfUsd = targetUsd / 2;
+    // Import liquidity math utility
+    const { calculatePositionAmounts } = require('../utils/liquidityMath');
     
-    // Amount A (token A) - assuming price is tokenA/tokenB
-    const amountA = halfUsd / currentPrice;
-    const amountB = halfUsd;
-
-    return {
-      amountA: (amountA * Math.pow(10, tokenADecimals)).toFixed(0),
-      amountB: (amountB * Math.pow(10, tokenBDecimals)).toFixed(0),
-    };
+    return calculatePositionAmounts(
+      targetUsd,
+      currentPrice,
+      priceLower,
+      priceUpper,
+      tokenADecimals,
+      tokenBDecimals
+    );
   }
 }
 

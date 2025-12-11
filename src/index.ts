@@ -159,9 +159,51 @@ class CetusOptimizer {
     const position = this.db.getActivePosition(pool.address);
 
     if (!position) {
-      // No position - check if we should open one
-      Logger.info(`No active position for ${pool.name}, would open position at current price`);
-      // In production, implement initial position opening logic
+      // No position - open initial position
+      Logger.info(`No active position for ${pool.name}, opening initial position`);
+      
+      try {
+        // Calculate initial range
+        const { calculateNewRange } = require('./utils/math');
+        const initialRange = calculateNewRange(
+          snapshot.price,
+          pool.rangeLowerBps,
+          pool.rangeUpperBps
+        );
+
+        // Open position
+        const positionId = await this.positionManager.openPosition(
+          pool,
+          initialRange.lower,
+          initialRange.upper,
+          snapshot.price
+        );
+
+        Logger.info(`Initial position opened for ${pool.name}`, {
+          positionId,
+          range: initialRange,
+          price: snapshot.price,
+        });
+
+        // Send Telegram notification
+        if (GLOBAL_CONFIG.alertOnEveryRebalance) {
+          await this.telegram.sendMessage(
+            `✅ *INITIAL POSITION OPENED*\n\n` +
+            `*Pool:* ${pool.name}\n` +
+            `*Range:* $${initialRange.lower.toFixed(4)} - $${initialRange.upper.toFixed(4)}\n` +
+            `*Current Price:* $${snapshot.price.toFixed(4)}\n` +
+            `*Position Size:* $${pool.positionSizeUsd}\n` +
+            `*Position ID:* ${positionId}`
+          );
+        }
+      } catch (error) {
+        Logger.error(`Failed to open initial position for ${pool.name}`, error);
+        await this.telegram.sendErrorAlert({
+          type: 'Initial Position Failed',
+          pool: pool.name,
+          message: `Failed to open initial position: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
       return;
     }
 

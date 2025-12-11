@@ -51,6 +51,7 @@ export class SuiService {
         options: {
           showEffects: true,
           showEvents: true,
+          showObjectChanges: true,
         },
       });
 
@@ -59,6 +60,55 @@ export class SuiService {
       }
 
       return result.digest;
+    });
+  }
+
+  async executeTransactionWithResult(txb: Transaction): Promise<any> {
+    if (!this.keypair) {
+      throw new Error('Wallet not initialized');
+    }
+
+    return retryWithBackoff(async () => {
+      const result = await this.client.signAndExecuteTransaction({
+        signer: this.keypair!,
+        transaction: txb,
+        options: {
+          showEffects: true,
+          showEvents: true,
+          showObjectChanges: true,
+        },
+      });
+
+      if (result.effects?.status?.status === 'failure') {
+        throw new Error(`Transaction failed: ${result.effects.status.error}`);
+      }
+
+      return result;
+    });
+  }
+
+  async simulateTransaction(txb: Transaction): Promise<any> {
+    if (!this.keypair) {
+      throw new Error('Wallet not initialized');
+    }
+
+    return retryWithBackoff(async () => {
+      return await this.client.dryRunTransaction({
+        transaction: txb,
+      });
+    });
+  }
+
+  async getTransactionResult(txDigest: string): Promise<any> {
+    return retryWithBackoff(async () => {
+      return await this.client.getTransactionBlock({
+        digest: txDigest,
+        options: {
+          showEffects: true,
+          showEvents: true,
+          showObjectChanges: true,
+        },
+      });
     });
   }
 

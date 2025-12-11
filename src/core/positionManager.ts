@@ -6,6 +6,7 @@ import { DatabaseService } from '../services/database';
 import { StrategyEngine } from './strategyEngine';
 import { Logger } from '../utils/logger';
 import { calculateSkim } from '../utils/math';
+import { parseTransactionResult, parsePositionIdFromTx, parseGasUsedFromTx } from '../utils/transactionParser';
 
 export interface RebalanceResult {
   success: boolean;
@@ -47,6 +48,8 @@ export class PositionManager {
       const { amountA, amountB } = this.strategyEngine.calculatePositionSize(
         config.positionSizeUsd,
         currentPrice,
+        priceLower,
+        priceUpper,
         config.tokenA.decimals,
         config.tokenB.decimals
       );
@@ -66,12 +69,27 @@ export class PositionManager {
         config.maxSlippageBps / 100
       );
 
-      // Execute transaction
-      const txDigest = await this.suiService.executeTransaction(txb);
+      // Simulate transaction first to check for errors
+      try {
+        await this.suiService.simulateTransaction(txb);
+      } catch (error) {
+        Logger.error('Transaction simulation failed', error);
+        throw new Error(`Transaction simulation failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
 
-      // Get position ID from transaction result
-      // In production, parse the transaction result to get position ID
-      const positionId = await this.getPositionIdFromTx(txDigest);
+      // Execute transaction and get full result
+      const txResult = await this.suiService.executeTransactionWithResult(txb);
+      const txDigest = txResult.digest;
+
+      // Parse transaction result to get position ID
+      const parsed = parseTransactionResult(
+        txResult,
+        config.address,
+        config.tokenA.address,
+        config.tokenB.address
+      );
+
+      const positionId = parsed.positionId || await this.getPositionIdFromTx(txDigest);
 
       // Record position in database
       const positionIdNum = this.db.createPosition({
@@ -111,23 +129,53 @@ export class PositionManager {
     try {
       // Collect fees first if needed
       let feesCollected = { tokenA: '0', tokenB: '0', usd: 0 };
+      let feeTxDigest: string | undefined;
       
       if (collectFees) {
         const feeTxb = await this.cetusService.collectFeesTx(position.positionId);
-        const feeTxDigest = await this.suiService.executeTransaction(feeTxb);
         
-        // In production, parse transaction to get actual fee amounts
-        // For now, estimate based on position value
-        feesCollected = {
+        // Simulate fee collection
+        try {
+          await this.suiService.simulateTransaction(feeTxb);
+        } catch (error) {
+          Logger.warn('Fee collection simulation failed, continuing anyway', error);
+        }
+        
+        const feeTxResult = await this.suiService.executeTransactionWithResult(feeTxb);
+        feeTxDigest = feeTxResult.digest;
+        
+        // Parse actual fee amounts from transaction
+        const feeParsed = parseTransactionResult(
+          feeTxResult,
+          config.address,
+          config.tokenA.address,
+          config.tokenB.address
+        );
+        
+        feesCollected = feeParsed.feesCollected || {
           tokenA: '0',
           tokenB: '0',
-          usd: parseFloat(position.entryValueUsd.toString()) * 0.01, // Estimate 1% fees
+          usd: parseFloat(position.entryValueUsd.toString()) * 0.01, // Fallback estimate
         };
       }
 
       // Close position
       const closeTxb = await this.cetusService.closePositionTx(position.positionId, collectFees);
-      const txDigest = await this.suiService.executeTransaction(closeTxb);
+      
+      // Simulate close transaction
+      try {
+        await this.suiService.simulateTransaction(closeTxb);
+      } catch (error) {
+        Logger.error('Close position simulation failed', error);
+        throw error;
+      }
+      
+      const closeTxResult = await this.suiService.executeTransactionWithResult(closeTxb);
+      const txDigest = closeTxResult.digest;
+      
+      // Parse gas used from transaction
+      const gasParsed = parseGasUsedFromTx(closeTxResult);
+      const gasUsed = gasParsed.gasUsed;
 
       // Mark position as closed in database
       this.db.closePosition(position.id, 'rebalance');
@@ -141,7 +189,7 @@ export class PositionManager {
 
       return {
         feesCollected,
-        gasUsed: '0.002', // Estimate - in production, parse from transaction
+        gasUsed,
         txDigest,
       };
     } catch (error) {
@@ -239,10 +287,27 @@ export class PositionManager {
   }
 
   private async getPositionIdFromTx(txDigest: string): Promise<string> {
-    // In production, fetch transaction details and parse position ID
-    // For now, return a placeholder
-    // This would require parsing the transaction result from Sui
-    return `position_${txDigest.slice(0, 16)}`;
+    try {
+      // Fetch transaction details
+      const txResult = await this.suiService.getTransactionResult(txDigest);
+      
+      // Try to parse position ID from transaction
+      // This is a fallback if position ID wasn't found in initial parse
+      const positionId = parsePositionIdFromTx(txResult, '');
+      
+      if (positionId) {
+        return positionId;
+      }
+      
+      // Last resort: generate a temporary ID based on transaction
+      Logger.warn('Could not extract position ID from transaction, using fallback', {
+        txDigest,
+      });
+      return `position_${txDigest.slice(0, 16)}`;
+    } catch (error) {
+      Logger.error('Failed to get position ID from transaction', error);
+      return `position_${txDigest.slice(0, 16)}`;
+    }
   }
 }
 

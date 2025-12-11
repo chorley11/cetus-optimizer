@@ -118,12 +118,20 @@ export class CetusService {
 
   /**
    * Convert price to tick
+   * Uses the formula: tick = log(price) / log(1.0001)
    */
   priceToTick(price: number, tickSpacing: number): number {
-    // Simplified tick calculation
-    // In production, use the exact formula from Cetus SDK
+    if (price <= 0) {
+      throw new Error('Price must be greater than 0');
+    }
+    
+    // Calculate tick from price: price = 1.0001^tick
     const tick = Math.log(price) / Math.log(1.0001);
-    return Math.floor(tick / tickSpacing) * tickSpacing;
+    
+    // Round down to nearest tick spacing
+    const tickRounded = Math.floor(tick / tickSpacing) * tickSpacing;
+    
+    return tickRounded;
   }
 
   /**

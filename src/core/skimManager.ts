@@ -4,6 +4,7 @@ import { DatabaseService } from '../services/database';
 import { TelegramService } from '../services/telegram';
 import { GLOBAL_CONFIG } from '../config';
 import { Logger } from '../utils/logger';
+import { getCoinObjects, getCoinBalance } from '../utils/coinUtils';
 
 export class SkimManager {
   private suiService: SuiService;
@@ -51,28 +52,78 @@ export class SkimManager {
       }
 
       // Transfer USDC if amount > 0
-      // Note: In production, you'll need to get the USDC coin object and transfer it
-      // This is a simplified version
       if (usdcAmount > 0) {
-        Logger.info(`USDC transfer not yet implemented - would transfer $${usdcAmount}`);
-        // TODO: Implement USDC transfer using coin objects
+        try {
+          // Get USDC coin type address (from environment or config)
+          const usdcCoinType = process.env.USDC_COIN_TYPE || '0x...::usdc::USDC';
+          
+          // Check balance
+          const client = this.suiService.getClient();
+          const balance = await getCoinBalance(client, mainWalletAddress, usdcCoinType);
+          const usdcAmountMist = BigInt(Math.floor(usdcAmount * 1e6)); // USDC has 6 decimals
+          
+          if (balance < usdcAmountMist) {
+            Logger.warn(`Insufficient USDC balance. Have: ${balance}, Need: ${usdcAmountMist}`);
+            // Record partial transfer
+            const actualUsdc = Number(balance) / 1e6;
+            this.db.recordSkim(poolAddress, rebalanceId, actualUsdc, suiAmount);
+            return null;
+          }
+          
+          // Get coin objects
+          const coinObjects = await getCoinObjects(client, mainWalletAddress, usdcCoinType);
+          
+          if (coinObjects.length === 0) {
+            Logger.warn('No USDC coin objects found');
+            return null;
+          }
+          
+          // If multiple coins, merge them first
+          if (coinObjects.length > 1) {
+            const primaryCoin = txb.object(coinObjects[0]);
+            const otherCoins = coinObjects.slice(1).map(id => txb.object(id));
+            txb.mergeCoins(primaryCoin, otherCoins);
+          }
+          
+          // Split the amount needed
+          const coinToTransfer = txb.splitCoins(
+            txb.object(coinObjects[0]),
+            [usdcAmountMist]
+          );
+          
+          // Transfer USDC
+          txb.transferObjects([coinToTransfer], skimWalletAddress);
+          
+          Logger.info(`USDC transfer prepared: $${usdcAmount}`);
+        } catch (error) {
+          Logger.error('Failed to prepare USDC transfer', error);
+          // Continue with SUI transfer if USDC fails
+        }
       }
 
       // Execute transaction if there's anything to transfer
       let txDigest: string | null = null;
-      if (suiAmount > 0) {
-        txDigest = await this.suiService.executeTransaction(txb);
-        
-        // Record skim in database
-        this.db.recordSkim(poolAddress, rebalanceId, usdcAmount, suiAmount, txDigest);
+      if (suiAmount > 0 || usdcAmount > 0) {
+        // Check if transaction has any operations
+        // If txb has operations, execute it
+        try {
+          txDigest = await this.suiService.executeTransaction(txb);
+          
+          // Record skim in database
+          this.db.recordSkim(poolAddress, rebalanceId, usdcAmount, suiAmount, txDigest);
 
-        Logger.info(`Skim transferred`, {
-          usdc: usdcAmount,
-          sui: suiAmount,
-          txDigest,
-        });
+          Logger.info(`Skim transferred`, {
+            usdc: usdcAmount,
+            sui: suiAmount,
+            txDigest,
+          });
+        } catch (error) {
+          Logger.error('Failed to execute skim transfer transaction', error);
+          // Record attempt even if transfer fails
+          this.db.recordSkim(poolAddress, rebalanceId, usdcAmount, suiAmount);
+        }
       } else {
-        // Record even if no transfer (for USDC-only skims that aren't implemented yet)
+        // Record even if no transfer
         this.db.recordSkim(poolAddress, rebalanceId, usdcAmount, suiAmount);
       }
 
