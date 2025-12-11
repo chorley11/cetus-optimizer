@@ -95,8 +95,8 @@ export class PythService {
     };
 
     const apiFeedId = apiFeedMap[feedId];
-    if (!apiFeedId || apiFeedId === '0x...') {
-      throw new Error(`Pyth feed ID not configured for ${feedId}`);
+    if (!apiFeedId || apiFeedId === '') {
+      throw new Error(`Pyth feed ID not available for ${feedId} - feed does not exist in Pyth Network`);
     }
 
     // Use Pyth's HTTP API
