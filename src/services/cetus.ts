@@ -391,11 +391,18 @@ export class CetusService {
       // Patch SDK client before making position calls
       this.patchSdkClient();
       
-      // Try different API method names
+      // Try different API method names and SDK structures
       const positionModule = this.sdk.Position as any;
+      const sdkAny = this.sdk as any;
+      
+      // Log available methods for debugging
+      const availableMethods = Object.keys(positionModule || {}).filter(k => typeof positionModule[k] === 'function');
+      Logger.debug('Available Position module methods', { methods: availableMethods });
       
       try {
+        // Try multiple possible method names
         if (positionModule.createPositionTx) {
+          Logger.debug('Using createPositionTx method');
           return await positionModule.createPositionTx({
             poolId: poolAddress,
             tickLower,
@@ -405,6 +412,7 @@ export class CetusService {
             slippage,
           });
         } else if (positionModule.createPosition) {
+          Logger.debug('Using createPosition method');
           return await positionModule.createPosition({
             poolId: poolAddress,
             tickLower,
@@ -413,11 +421,61 @@ export class CetusService {
             amountB,
             slippage,
           });
+        } else if (positionModule.openPosition) {
+          Logger.debug('Using openPosition method');
+          return await positionModule.openPosition({
+            poolId: poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage,
+          });
+        } else if (positionModule.mintPositionTx) {
+          Logger.debug('Using mintPositionTx method');
+          return await positionModule.mintPositionTx({
+            poolId: poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage,
+          });
+        } else if (sdkAny.createPositionTx) {
+          Logger.debug('Using SDK-level createPositionTx method');
+          return await sdkAny.createPositionTx({
+            poolId: poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage,
+          });
+        } else if (sdkAny.Pool?.createPositionTx) {
+          Logger.debug('Using Pool.createPositionTx method');
+          return await sdkAny.Pool.createPositionTx({
+            poolId: poolAddress,
+            tickLower,
+            tickUpper,
+            amountA,
+            amountB,
+            slippage,
+          });
         } else {
-          throw new Error('Position creation method not found in SDK');
+          // Log SDK structure for debugging
+          Logger.error('Position creation method not found', {
+            positionModuleKeys: Object.keys(positionModule || {}),
+            sdkKeys: Object.keys(sdkAny || {}),
+            availableMethods,
+          });
+          throw new Error(`Position creation method not found in SDK. Available methods: ${availableMethods.join(', ')}`);
         }
       } catch (error: any) {
-        Logger.error('SDK createPositionTx failed, RPC URL may still be missing', { error: error.message });
+        Logger.error('SDK createPositionTx failed', { 
+          error: error.message,
+          stack: error.stack,
+          availableMethods,
+        });
         throw error;
       }
     });
