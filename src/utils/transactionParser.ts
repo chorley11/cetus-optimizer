@@ -189,8 +189,8 @@ export function parseTransactionResult(
     feesCollected: fees,
     gasUsed: gas.gasUsed,
     gasUsedMist: gas.gasUsedMist,
-    events: txResult.events,
-    objectChanges: txResult.objectChanges,
+    events: txResult.events || undefined,
+    objectChanges: txResult.objectChanges || undefined,
   };
 }
 

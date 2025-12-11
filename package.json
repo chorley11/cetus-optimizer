@@ -21,19 +21,19 @@
   "author": "Ben Putley",
   "license": "MIT",
   "dependencies": {
-    "@mysten/sui": "^1.0.0",
     "@cetusprotocol/cetus-sui-clmm-sdk": "^5.0.0",
-    "better-sqlite3": "^9.0.0",
-    "node-telegram-bot-api": "^0.64.0",
+    "@mysten/sui": "^1.0.0",
+    "better-sqlite3": "^12.5.0",
+    "decimal.js": "^10.4.0",
     "dotenv": "^16.0.0",
-    "decimal.js": "^10.4.0"
+    "node-telegram-bot-api": "^0.64.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.0.0",
+    "@types/node": "^20.0.0",
     "@types/node-telegram-bot-api": "^0.64.0",
-    "typescript": "^5.0.0",
-    "ts-node": "^10.0.0"
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=20.0.0",

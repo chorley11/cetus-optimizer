@@ -1,4 +1,4 @@
-import { TelegramBot } from 'node-telegram-bot-api';
+import TelegramBot from 'node-telegram-bot-api';
 import { DatabaseService } from '../services/database';
 import { BluefinPipeline } from './bluefinPipeline';
 import { PositionManager } from './positionManager';

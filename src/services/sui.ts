@@ -93,8 +93,10 @@ export class SuiService {
     }
 
     return retryWithBackoff(async () => {
-      return await this.client.dryRunTransaction({
-        transaction: txb,
+      // Convert Transaction to bytes for dry run
+      const txBytes = await txb.build({ client: this.client });
+      return await this.client.dryRunTransactionBlock({
+        transactionBlock: txBytes,
       });
     });
   }
