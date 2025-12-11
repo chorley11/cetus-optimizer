@@ -10,7 +10,7 @@ export const POOL_CONFIGS: PoolConfig[] = [
       decimals: 9 
     },
     tokenB: { 
-      address: process.env.USDC_ADDRESS || "0x...::usdc::USDC", 
+      address: process.env.USDC_ADDRESS || "0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93b2::coin::COIN", // Mainnet USDC
       symbol: "USDC", 
       decimals: 6 
     },

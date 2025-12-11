@@ -171,12 +171,13 @@ class CetusOptimizer {
           pool.rangeUpperBps
         );
 
-        // Open position
+        // Open position with zap-in (SUI only)
         const positionId = await this.positionManager.openPosition(
           pool,
           initialRange.lower,
           initialRange.upper,
-          snapshot.price
+          snapshot.price,
+          true  // zapWithSui = true
         );
 
         Logger.info(`Initial position opened for ${pool.name}`, {

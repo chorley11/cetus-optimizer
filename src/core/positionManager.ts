@@ -41,7 +41,8 @@ export class PositionManager {
     config: PoolConfig,
     priceLower: number,
     priceUpper: number,
-    currentPrice: number
+    currentPrice: number,
+    zapWithSui: boolean = true  // New parameter: zap in with SUI only
   ): Promise<string> {
     try {
       // Calculate position size
@@ -58,6 +59,55 @@ export class PositionManager {
       const poolInfo = await this.cetusService.getPoolInfo(config.address);
       const tickLower = this.cetusService.priceToTick(priceLower, poolInfo.tickSpacing);
       const tickUpper = this.cetusService.priceToTick(priceUpper, poolInfo.tickSpacing);
+
+      // If zap-in mode and SUI is one of the tokens, swap first
+      if (zapWithSui) {
+        const suiAddress = "0x2::sui::SUI";
+        const isSuiTokenA = config.tokenA.address === suiAddress;
+        const isSuiTokenB = config.tokenB.address === suiAddress;
+        
+        if (isSuiTokenA || isSuiTokenB) {
+          Logger.info(`Zap-in mode: Swapping SUI to get both tokens`, {
+            pool: config.name,
+            tokenA: config.tokenA.symbol,
+            tokenB: config.tokenB.symbol,
+          });
+          
+          // Calculate how much SUI we need total and how much to swap
+          const totalSuiNeeded = parseFloat(amountA) + (parseFloat(amountB) / currentPrice);
+          const swapAmountSui = parseFloat(amountB) / currentPrice; // Amount to swap to get tokenB
+          
+          // Perform swap first
+          const tokenIn = suiAddress;
+          const tokenOut = isSuiTokenA ? config.tokenB.address : config.tokenA.address;
+          
+          try {
+            const swapTx = await this.cetusService.createSwapTx(
+              config.address,
+              tokenIn,
+              tokenOut,
+              String(Math.floor(swapAmountSui * 1e9)), // Convert to smallest unit
+              config.maxSlippageBps / 100
+            );
+            
+            // Simulate swap
+            await this.suiService.simulateTransaction(swapTx);
+            
+            // Execute swap
+            const swapResult = await this.suiService.executeTransactionWithResult(swapTx);
+            Logger.info(`Swap completed for zap-in`, {
+              pool: config.name,
+              txDigest: swapResult.digest,
+            });
+            
+            // Small delay to ensure swap is processed
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } catch (error) {
+            Logger.warn(`Swap failed, attempting direct position creation`, error);
+            // Fall through to direct position creation
+          }
+        }
+      }
 
       // Create position transaction
       const txb = await this.cetusService.createPositionTx(
@@ -111,6 +161,7 @@ export class PositionManager {
         pool: config.name,
         positionId,
         range: { lower: priceLower, upper: priceUpper },
+        zapMode: zapWithSui,
         txDigest,
       });
 

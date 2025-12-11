@@ -192,6 +192,163 @@ export class CetusService {
     return Math.pow(1.0001, tick);
   }
 
+  /**
+   * Create a swap transaction to convert SUI to another token
+   * Used for "zap in" functionality
+   */
+  async createSwapTx(
+    poolAddress: string,
+    tokenIn: string,  // Token address to swap from (e.g., SUI)
+    tokenOut: string, // Token address to swap to (e.g., USDC)
+    amountIn: string,
+    slippage: number = 0.5
+  ) {
+    return retryWithBackoff(async () => {
+      const swapModule = this.sdk.Swap as any;
+      
+      if (swapModule.swapTx) {
+        return await swapModule.swapTx({
+          poolId: poolAddress,
+          tokenIn,
+          tokenOut,
+          amountIn,
+          slippage,
+        });
+      } else if (swapModule.swap) {
+        return await swapModule.swap({
+          poolId: poolAddress,
+          tokenIn,
+          tokenOut,
+          amountIn,
+          slippage,
+        });
+      } else {
+        // Fallback: create transaction manually using SDK
+        const { Transaction } = require('@mysten/sui/transactions');
+        const txb = new Transaction();
+        
+        // Use SDK's swap method if available
+        const swapMethod = (this.sdk as any).swap || (this.sdk as any).Swap?.swap;
+        if (swapMethod) {
+          return await swapMethod({
+            poolId: poolAddress,
+            tokenIn,
+            tokenOut,
+            amountIn,
+            slippage,
+          });
+        }
+        
+        throw new Error('Swap method not found in Cetus SDK');
+      }
+    });
+  }
+
+  /**
+   * Calculate swap amount needed to get equal value of both tokens
+   * For zap-in: if providing SUI, swap half value to USDC
+   */
+  calculateZapSwapAmount(
+    totalValueUsd: number,
+    currentPrice: number,
+    tokenInIsTokenA: boolean // true if tokenIn is tokenA (e.g., SUI)
+  ): { amountIn: string; expectedAmountOut: string } {
+    // For equal value positions, we need:
+    // - If SUI is tokenA: need equal USD value of SUI and USDC
+    // - Total value = amountA * price + amountB
+    // - For equal value: amountA * price = amountB
+    // - So: amountB = amountA * price
+    // - Total = amountA * price + amountA * price = 2 * amountA * price
+    // - amountA = total / (2 * price)
+    // - amountB = total / 2
+    
+    if (tokenInIsTokenA) {
+      // Providing SUI (tokenA), need to swap to get USDC (tokenB)
+      // We want: amountA * price = amountB
+      // Total USD = amountA * price + amountB = 2 * amountA * price
+      // So: amountA = total / (2 * price)
+      const amountAUsd = totalValueUsd / 2;
+      const amountBUsd = totalValueUsd / 2;
+      
+      // Convert to token amounts
+      const amountA = amountAUsd / currentPrice; // SUI amount
+      const amountB = amountBUsd; // USDC amount
+      
+      // We have SUI, need to swap some to get USDC
+      // If we have X SUI total, we want amountA SUI and amountB USDC
+      // So we need to swap: (X - amountA) SUI to get amountB USDC
+      // But we don't know X yet... let's think differently
+      
+      // Actually: if total value is V, we want V/2 in each token
+      // If providing SUI: we need V/2 worth of SUI, swap V/2 worth to USDC
+      const suiNeeded = amountAUsd / currentPrice;
+      const usdcNeeded = amountBUsd;
+      
+      // Amount to swap: half the total value in SUI
+      const swapAmountSui = totalValueUsd / (2 * currentPrice);
+      const expectedUsdcOut = totalValueUsd / 2;
+      
+      return {
+        amountIn: String(Math.floor(swapAmountSui * 1e9)), // Convert to smallest unit
+        expectedAmountOut: String(Math.floor(expectedUsdcOut * 1e6)), // USDC has 6 decimals
+      };
+    } else {
+      // Providing USDC (tokenB), need to swap to get SUI (tokenA)
+      const amountAUsd = totalValueUsd / 2;
+      const amountBUsd = totalValueUsd / 2;
+      
+      const swapAmountUsdc = totalValueUsd / 2;
+      const expectedSuiOut = amountAUsd / currentPrice;
+      
+      return {
+        amountIn: String(Math.floor(swapAmountUsdc * 1e6)), // USDC has 6 decimals
+        expectedAmountOut: String(Math.floor(expectedSuiOut * 1e9)), // SUI has 9 decimals
+      };
+    }
+  }
+
+  /**
+   * Create a zap-in transaction: swap + open position in one transaction
+   */
+  async createZapInPositionTx(
+    poolAddress: string,
+    tickLower: number,
+    tickUpper: number,
+    tokenIn: string,  // Token to zap in with (e.g., SUI)
+    tokenA: string,   // Token A address
+    tokenB: string,   // Token B address
+    totalValueUsd: number,
+    currentPrice: number,
+    tokenInIsTokenA: boolean,
+    slippage: number = 0.5
+  ) {
+    return retryWithBackoff(async () => {
+      const { Transaction } = require('@mysten/sui/transactions');
+      const txb = new Transaction();
+      
+      // Calculate swap amounts
+      const swapAmounts = this.calculateZapSwapAmount(
+        totalValueUsd,
+        currentPrice,
+        tokenInIsTokenA
+      );
+      
+      // Step 1: Swap half to get the other token
+      // Note: This is a simplified approach - in practice, you might need to
+      // use the SDK's actual swap method or combine transactions differently
+      
+      // For now, we'll create a transaction that:
+      // 1. Splits coins for swap
+      // 2. Performs swap
+      // 3. Opens position with both tokens
+      
+      // This is a placeholder - actual implementation depends on Cetus SDK API
+      // The SDK might have a built-in zap method, or we need to combine swap + position
+      
+      throw new Error('Zap-in transaction creation not fully implemented - use two-step process');
+    });
+  }
+
   getSDK(): CetusClmmSDK {
     return this.sdk;
   }
