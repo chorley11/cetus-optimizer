@@ -147,22 +147,45 @@ export class CetusService {
       const rpcUrl = process.env.SUI_RPC_URL || 'https://fullnode.mainnet.sui.io';
       const sdkAny = this.sdk as any;
       
-      // Try to patch the SDK's internal client/transport with RPC URL
-      if (sdkAny.client) {
-        if (!sdkAny.client.url) {
-          sdkAny.client.url = rpcUrl;
-        }
-        // Also check transport layer
-        if (sdkAny.client.transport && !sdkAny.client.transport.url) {
-          sdkAny.client.transport.url = rpcUrl;
+      // Comprehensive patching of all possible client locations
+      const clientsToPatch = [
+        sdkAny.client,
+        sdkAny.suiClient,
+        sdkAny.Pool?.client,
+        sdkAny.Pool?.suiClient,
+      ].filter(Boolean);
+      
+      for (const client of clientsToPatch) {
+        if (client) {
+          // Set URL on client itself
+          if (!client.url) client.url = rpcUrl;
+          if (!client.fullNodeUrl) client.fullNodeUrl = rpcUrl;
+          
+          // Patch transport layer - this is where the actual HTTP request happens
+          if (client.transport) {
+            if (!client.transport.url) client.transport.url = rpcUrl;
+            if (!client.transport.fullNodeUrl) client.transport.fullNodeUrl = rpcUrl;
+            // Handle JsonRpcHTTPTransport specifically
+            if (client.transport.constructor?.name === 'JsonRpcHTTPTransport') {
+              (client.transport as any).url = rpcUrl;
+            }
+          }
+          
+          // Patch RPC module if it exists
+          if (client.rpc?.transport) {
+            if (!client.rpc.transport.url) client.rpc.transport.url = rpcUrl;
+          }
         }
       }
-      if (sdkAny.suiClient) {
-        if (!sdkAny.suiClient.url) {
-          sdkAny.suiClient.url = rpcUrl;
+      
+      // Patch Pool module's client directly
+      if (sdkAny.Pool) {
+        const poolClient = sdkAny.Pool.client || sdkAny.Pool.suiClient;
+        if (poolClient?.transport && !poolClient.transport.url) {
+          poolClient.transport.url = rpcUrl;
         }
-        if (sdkAny.suiClient.transport && !sdkAny.suiClient.transport.url) {
-          sdkAny.suiClient.transport.url = rpcUrl;
+        if (sdkAny.Pool.rpc?.transport && !sdkAny.Pool.rpc.transport.url) {
+          sdkAny.Pool.rpc.transport.url = rpcUrl;
         }
       }
       
