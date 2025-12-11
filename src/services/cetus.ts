@@ -796,10 +796,10 @@ export class CetusService {
       const coinObjectsA = await this.suiService.getOwnedCoinObjects(walletAddress, coinTypeA);
       const coinObjectsB = await this.suiService.getOwnedCoinObjects(walletAddress, coinTypeB);
       
-      if (coinObjectsA.length === 0) {
+      if (coinObjectsA.data.length === 0) {
         throw new Error(`No ${coinTypeA} coins found in wallet`);
       }
-      if (coinObjectsB.length === 0) {
+      if (coinObjectsB.data.length === 0) {
         throw new Error(`No ${coinTypeB} coins found in wallet`);
       }
       
@@ -817,9 +817,9 @@ export class CetusService {
         coinA = txb.splitCoins(txb.gas, [amountABigInt]);
       } else {
         // For other coins, merge all coins first, then split
-        const primaryCoinA = txb.object(coinObjectsA[0].coinObjectId);
-        if (coinObjectsA.length > 1) {
-          const otherCoinsA = coinObjectsA.slice(1).map((c: any) => txb.object(c.coinObjectId));
+        const primaryCoinA = txb.object(coinObjectsA.data[0].coinObjectId);
+        if (coinObjectsA.data.length > 1) {
+          const otherCoinsA = coinObjectsA.data.slice(1).map((c: any) => txb.object(c.coinObjectId));
           txb.mergeCoins(primaryCoinA, otherCoinsA);
         }
         coinA = txb.splitCoins(primaryCoinA, [amountABigInt]);
@@ -830,9 +830,9 @@ export class CetusService {
         coinB = txb.splitCoins(txb.gas, [amountBBigInt]);
       } else {
         // For other coins, merge all coins first, then split
-        const primaryCoinB = txb.object(coinObjectsB[0].coinObjectId);
-        if (coinObjectsB.length > 1) {
-          const otherCoinsB = coinObjectsB.slice(1).map((c: any) => txb.object(c.coinObjectId));
+        const primaryCoinB = txb.object(coinObjectsB.data[0].coinObjectId);
+        if (coinObjectsB.data.length > 1) {
+          const otherCoinsB = coinObjectsB.data.slice(1).map((c: any) => txb.object(c.coinObjectId));
           txb.mergeCoins(primaryCoinB, otherCoinsB);
         }
         coinB = txb.splitCoins(primaryCoinB, [amountBBigInt]);
