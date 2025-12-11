@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { SuiClient } from '@mysten/sui/client';
+import TelegramBot from 'node-telegram-bot-api';
 import { SuiService } from './services/sui';
 import { CetusService } from './services/cetus';
 import { PythService } from './services/pyth';
