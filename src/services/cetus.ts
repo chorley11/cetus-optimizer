@@ -778,12 +778,27 @@ export class CetusService {
       coinTypeB,
     });
     
-    // Validate coin types are provided
+    // Validate coin types are provided and not placeholders
     if (!coinTypeA || !coinTypeB) {
       throw new Error(
         'Manual position creation requires coin types. ' +
         `coinTypeA: ${coinTypeA || 'missing'}, coinTypeB: ${coinTypeB || 'missing'}. ` +
         'Please ensure pool config includes token addresses.'
+      );
+    }
+    
+    // Validate coin types are not placeholders (e.g., "0x...::usdc::USDC")
+    if (coinTypeA.includes('...') || coinTypeB.includes('...')) {
+      throw new Error(
+        `Invalid coin type format (contains placeholder): coinTypeA=${coinTypeA}, coinTypeB=${coinTypeB}. ` +
+        'Please set proper token addresses in environment variables (e.g., DEEP_ADDRESS, WAL_ADDRESS, USDC_ADDRESS).'
+      );
+    }
+    
+    // Validate coin types start with 0x and have proper format
+    if (!coinTypeA.startsWith('0x') || !coinTypeB.startsWith('0x')) {
+      throw new Error(
+        `Invalid coin type format (must start with 0x): coinTypeA=${coinTypeA}, coinTypeB=${coinTypeB}`
       );
     }
     
@@ -796,6 +811,13 @@ export class CetusService {
         throw new Error('SuiService not available - cannot fetch coin objects');
       }
       const walletAddress = this.suiService.getAddress();
+      
+      Logger.info('Fetching coin objects', {
+        walletAddress,
+        coinTypeA,
+        coinTypeB,
+      });
+      
       const coinObjectsA = await this.suiService.getClient().getCoins({
         owner: walletAddress,
         coinType: coinTypeA,
