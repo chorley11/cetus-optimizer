@@ -792,9 +792,18 @@ export class CetusService {
       const poolObj = txb.object(poolAddress);
       
       // Get coin objects for both tokens
+      if (!this.suiService) {
+        throw new Error('SuiService not available - cannot fetch coin objects');
+      }
       const walletAddress = this.suiService.getAddress();
-      const coinObjectsA = await this.suiService.getOwnedCoinObjects(walletAddress, coinTypeA);
-      const coinObjectsB = await this.suiService.getOwnedCoinObjects(walletAddress, coinTypeB);
+      const coinObjectsA = await this.suiService.getClient().getCoins({
+        owner: walletAddress,
+        coinType: coinTypeA,
+      });
+      const coinObjectsB = await this.suiService.getClient().getCoins({
+        owner: walletAddress,
+        coinType: coinTypeB,
+      });
       
       if (coinObjectsA.data.length === 0) {
         throw new Error(`No ${coinTypeA} coins found in wallet`);
