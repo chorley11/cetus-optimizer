@@ -7,6 +7,32 @@ export class TelegramService {
   private chatId: string;
   private alertsPaused: boolean = false;
 
+  /**
+   * Escape Markdown special characters to prevent parsing errors
+   */
+  private escapeMarkdown(text: string): string {
+    // Escape special Markdown characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    return text
+      .replace(/\_/g, '\\_')
+      .replace(/\*/g, '\\*')
+      .replace(/\[/g, '\\[')
+      .replace(/\]/g, '\\]')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)')
+      .replace(/\~/g, '\\~')
+      .replace(/\`/g, '\\`')
+      .replace(/\>/g, '\\>')
+      .replace(/\#/g, '\\#')
+      .replace(/\+/g, '\\+')
+      .replace(/\-/g, '\\-')
+      .replace(/\=/g, '\\=')
+      .replace(/\|/g, '\\|')
+      .replace(/\{/g, '\\{')
+      .replace(/\}/g, '\\}')
+      .replace(/\./g, '\\.')
+      .replace(/\!/g, '\\!');
+  }
+
   constructor(token: string, chatId: string) {
     this.chatId = chatId;
     try {
@@ -40,9 +66,20 @@ export class TelegramService {
     }
 
     try {
+      // Try sending with Markdown first, fallback to plain text if parsing fails
       await this.bot.sendMessage(this.chatId, text, { parse_mode: 'Markdown' });
-    } catch (error) {
-      Logger.error('Failed to send Telegram message', error);
+    } catch (error: any) {
+      // If Markdown parsing fails, try sending as plain text
+      if (error.message?.includes('parse entities') || error.message?.includes('Bad Request')) {
+        Logger.warn('Markdown parsing failed, sending as plain text', { error: error.message });
+        try {
+          await this.bot.sendMessage(this.chatId, text, { parse_mode: undefined });
+        } catch (fallbackError) {
+          Logger.error('Failed to send Telegram message (both Markdown and plain text failed)', fallbackError);
+        }
+      } else {
+        Logger.error('Failed to send Telegram message', error);
+      }
     }
   }
 
