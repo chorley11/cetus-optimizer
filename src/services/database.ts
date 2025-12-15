@@ -154,6 +154,21 @@ export class DatabaseService {
 
   // Position methods
   createPosition(position: Omit<Position, 'id' | 'openedAt'>): number {
+    // Check if position with this ID already exists
+    const existingStmt = this.db.prepare(`
+      SELECT id FROM positions WHERE position_id = ?
+    `);
+    const existing = existingStmt.get(position.positionId) as any;
+    
+    if (existing) {
+      Logger.warn(`Position with ID ${position.positionId} already exists in database`, {
+        existingId: existing.id,
+        poolAddress: position.poolAddress,
+      });
+      // Return existing position ID instead of creating duplicate
+      return existing.id;
+    }
+    
     const stmt = this.db.prepare(`
       INSERT INTO positions (
         pool_address, position_id, tick_lower, tick_upper,
@@ -162,22 +177,36 @@ export class DatabaseService {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const result = stmt.run(
-      position.poolAddress,
-      position.positionId,
-      position.tickLower,
-      position.tickUpper,
-      position.priceLower,
-      position.priceUpper,
-      position.liquidity,
-      position.amountA,
-      position.amountB,
-      position.entryPrice,
-      position.entryValueUsd,
-      position.status
-    );
+    try {
+      const result = stmt.run(
+        position.poolAddress,
+        position.positionId,
+        position.tickLower,
+        position.tickUpper,
+        position.priceLower,
+        position.priceUpper,
+        position.liquidity,
+        position.amountA,
+        position.amountB,
+        position.entryPrice,
+        position.entryValueUsd,
+        position.status
+      );
 
-    return result.lastInsertRowid as number;
+      return result.lastInsertRowid as number;
+    } catch (error: any) {
+      // Handle unique constraint violation gracefully
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.message?.includes('UNIQUE constraint')) {
+        Logger.warn(`Position ${position.positionId} already exists, fetching existing record`, {
+          poolAddress: position.poolAddress,
+        });
+        const existing = existingStmt.get(position.positionId) as any;
+        if (existing) {
+          return existing.id;
+        }
+      }
+      throw error;
+    }
   }
 
   getActivePosition(poolAddress: string): Position | null {

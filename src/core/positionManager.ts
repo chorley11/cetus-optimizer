@@ -24,6 +24,7 @@ export class PositionManager {
   private db: DatabaseService;
   private strategyEngine: StrategyEngine;
   private lastRebalanceTime: Map<string, number> = new Map();
+  private openingPositions: Set<string> = new Set(); // Track pools currently opening positions
 
   constructor(
     cetusService: CetusService,
@@ -44,6 +45,20 @@ export class PositionManager {
     currentPrice: number,
     zapWithSui: boolean = true  // New parameter: zap in with SUI only
   ): Promise<string> {
+    // Prevent concurrent position opening for the same pool
+    if (this.openingPositions.has(config.address)) {
+      Logger.warn(`Position opening already in progress for ${config.name}, skipping duplicate request`);
+      // Wait a bit and check if position was created
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const existingPosition = this.db.getActivePosition(config.address);
+      if (existingPosition) {
+        return existingPosition.positionId;
+      }
+      throw new Error(`Position opening already in progress for ${config.name}`);
+    }
+    
+    this.openingPositions.add(config.address);
+    
     try {
       // Calculate position size
       const { amountA, amountB } = this.strategyEngine.calculatePositionSize(
@@ -73,20 +88,37 @@ export class PositionManager {
             tokenB: config.tokenB.symbol,
           });
           
-          // Calculate how much SUI we need total and how much to swap
-          const totalSuiNeeded = parseFloat(amountA) + (parseFloat(amountB) / currentPrice);
-          const swapAmountSui = parseFloat(amountB) / currentPrice; // Amount to swap to get tokenB
+          // amountA and amountB are already in smallest units (from calculatePositionAmounts)
+          // Calculate swap amount: we need to swap enough SUI to get amountB of tokenB
+          // If SUI is tokenA: amountA is in MIST (smallest SUI), amountB is in smallest tokenB units
+          // If SUI is tokenB: amountA is in smallest tokenA units, amountB is in MIST
           
-          // Perform swap first
+          let swapAmountSui: string;
           const tokenIn = suiAddress;
           const tokenOut = isSuiTokenA ? config.tokenB.address : config.tokenA.address;
           
+          if (isSuiTokenA) {
+            // SUI is tokenA: we have amountA in MIST, need amountB in tokenB units
+            // To get amountB of tokenB, we need to swap: (amountB / currentPrice) in SUI terms
+            // But amountB is in smallest tokenB units, so convert to human-readable first
+            const amountBHuman = parseFloat(amountB) / Math.pow(10, config.tokenB.decimals);
+            const suiNeededHuman = amountBHuman / currentPrice; // SUI needed (human-readable)
+            swapAmountSui = String(Math.floor(suiNeededHuman * 1e9)); // Convert to MIST
+          } else {
+            // SUI is tokenB: we have amountB in MIST, need amountA in tokenA units
+            // To get amountA of tokenA, we need to swap: (amountA * currentPrice) in SUI terms
+            const amountAHuman = parseFloat(amountA) / Math.pow(10, config.tokenA.decimals);
+            const suiNeededHuman = amountAHuman * currentPrice; // SUI needed (human-readable)
+            swapAmountSui = String(Math.floor(suiNeededHuman * 1e9)); // Convert to MIST
+          }
+          
+          // Perform swap first
           try {
             const swapTx = await this.cetusService.createSwapTx(
               config.address,
               tokenIn,
               tokenOut,
-              String(Math.floor(swapAmountSui * 1e9)), // Convert to smallest unit
+              swapAmountSui, // Already in smallest units (MIST)
               config.maxSlippageBps / 100
             );
             
@@ -141,7 +173,25 @@ export class PositionManager {
         config.tokenB.address
       );
 
-      const positionId = parsed.positionId || await this.getPositionIdFromTx(txDigest);
+      let positionId = parsed.positionId;
+      
+      // If position ID not found in parsed result, try to get it from transaction
+      if (!positionId) {
+        positionId = await this.getPositionIdFromTx(txDigest);
+      }
+      
+      // Validate position ID was found
+      if (!positionId || positionId.startsWith('position_')) {
+        // Fallback ID indicates we couldn't extract real position ID
+        Logger.error(`Failed to extract position ID from transaction ${txDigest}`, {
+          pool: config.name,
+          parsedPositionId: parsed.positionId,
+          fallbackPositionId: positionId,
+        });
+        // Don't record in database if we don't have a real position ID
+        // The transaction might have succeeded but we can't track the position
+        throw new Error(`Failed to extract position ID from transaction. Transaction digest: ${txDigest}. Position may have been created but cannot be tracked.`);
+      }
 
       // Record position in database
       const positionIdNum = this.db.createPosition({
@@ -171,6 +221,9 @@ export class PositionManager {
     } catch (error) {
       Logger.error(`Failed to open position for ${config.name}`, error);
       throw error;
+    } finally {
+      // Always remove from opening set, even on error
+      this.openingPositions.delete(config.address);
     }
   }
 
@@ -270,7 +323,7 @@ export class PositionManager {
         return { success: false, error: 'Rebalance interval not met' };
       }
 
-      // Close old position and collect fees
+      // Close old position and collect fees first (we need the capital to open new position)
       const closeResult = await this.closePosition(config, position, true);
 
       // Calculate current position value (simplified)
@@ -284,21 +337,40 @@ export class PositionManager {
         0.10 // 10% skim
       );
 
-      // Open new position with remaining capital
-      const newPositionId = await this.openPosition(
-        config,
-        newRange.lower,
-        newRange.upper,
-        currentPrice
-      );
-
-      // Update last rebalance time
-      this.lastRebalanceTime.set(config.address, now);
-
-      // Record rebalance in database
-      const newPosition = this.db.getActivePosition(config.address);
-      if (!newPosition) {
-        throw new Error('Failed to retrieve new position after creation');
+      // CRITICAL: Open new position immediately after closing old one
+      // If this fails, we'll be left without a position - this is a critical error
+      let newPositionId: string;
+      let newPosition: Position | null = null;
+      
+      try {
+        // Open new position with remaining capital
+        newPositionId = await this.openPosition(
+          config,
+          newRange.lower,
+          newRange.upper,
+          currentPrice
+        );
+        
+        // Verify new position was created with retry logic
+        newPosition = this.db.getActivePosition(config.address);
+        if (!newPosition) {
+          for (let retry = 0; retry < 3; retry++) {
+            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retry)));
+            newPosition = this.db.getActivePosition(config.address);
+            if (newPosition) break;
+          }
+        }
+        
+        if (!newPosition) {
+          // CRITICAL: Old position is closed, new position failed to create
+          // This is a critical error - we have no active position
+          const errorMsg = `CRITICAL: Failed to create new position after closing old position. Pool ${config.name} is now without an active position. Manual intervention required.`;
+          Logger.error(errorMsg, { oldPositionId: position.positionId, newPositionId });
+          throw new Error(errorMsg);
+        }
+      } catch (openError) {
+        // Re-throw to be caught by outer catch block
+        throw openError;
       }
 
       const rebalanceId = this.db.createRebalance({
@@ -314,6 +386,9 @@ export class PositionManager {
         gasUsed: closeResult.gasUsed,
         txDigest: closeResult.txDigest,
       });
+
+      // Update last rebalance time ONLY after successful rebalance completion
+      this.lastRebalanceTime.set(config.address, now);
 
       Logger.info(`Rebalance completed`, {
         pool: config.name,

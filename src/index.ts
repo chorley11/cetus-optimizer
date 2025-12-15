@@ -31,6 +31,7 @@ class CetusOptimizer {
   private poolStates: Map<string, { paused: boolean; consecutiveFailures: number }> = new Map();
   private balanceCheckCounter: number = 0;
   private lastBalanceAlert: Date | null = null;
+  private isMonitoringLoopRunning: boolean = false;
 
   constructor() {
     // Initialize services
@@ -109,8 +110,15 @@ class CetusOptimizer {
     // Start monitoring loop
     const intervalMs = GLOBAL_CONFIG.priceCheckIntervalMs;
     this.monitoringInterval = setInterval(() => {
+      if (this.isMonitoringLoopRunning) {
+        Logger.warn('Monitoring loop already running, skipping this iteration');
+        return;
+      }
+      this.isMonitoringLoopRunning = true;
       this.monitoringLoop().catch(error => {
         Logger.error('Error in monitoring loop', error);
+      }).finally(() => {
+        this.isMonitoringLoopRunning = false;
       });
     }, intervalMs);
 
