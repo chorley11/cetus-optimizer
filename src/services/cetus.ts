@@ -838,14 +838,50 @@ export class CetusService {
       const amountABigInt = BigInt(amountA);
       const amountBBigInt = BigInt(amountB);
       
+      // Validate amounts fit within u64 range (max: 18446744073709551615)
+      const U64_MAX = BigInt('18446744073709551615');
+      if (amountABigInt > U64_MAX) {
+        Logger.error('Amount A exceeds u64 maximum', {
+          amountA,
+          amountABigInt: amountABigInt.toString(),
+          u64Max: U64_MAX.toString(),
+          poolAddress,
+        });
+        throw new Error(
+          `Amount A (${amountA}) exceeds u64 maximum (18446744073709551615). ` +
+          `This usually indicates a calculation error. Please check position size and token decimals.`
+        );
+      }
+      if (amountBBigInt > U64_MAX) {
+        Logger.error('Amount B exceeds u64 maximum', {
+          amountB,
+          amountBBigInt: amountBBigInt.toString(),
+          u64Max: U64_MAX.toString(),
+          poolAddress,
+        });
+        throw new Error(
+          `Amount B (${amountB}) exceeds u64 maximum (18446744073709551615). ` +
+          `This usually indicates a calculation error. Please check position size and token decimals.`
+        );
+      }
+      
       // Prepare coin objects for the transaction
       // For SUI, we can use gas coin splitting
       let coinA: any;
       let coinB: any;
       
+      // Helper function to convert BigInt to u64-safe value for splitCoins
+      // The Sui SDK's splitCoins accepts BigInt directly, but we need to ensure it's within u64 range
+      const toU64Safe = (value: bigint): bigint => {
+        if (value > U64_MAX) {
+          throw new Error(`Value ${value.toString()} exceeds u64 maximum`);
+        }
+        return value;
+      };
+      
       if (coinTypeA === '0x2::sui::SUI') {
-        // Use gas coin for SUI
-        coinA = txb.splitCoins(txb.gas, [amountABigInt]);
+        // Use gas coin for SUI - pass BigInt directly (SDK handles u64 serialization)
+        coinA = txb.splitCoins(txb.gas, [toU64Safe(amountABigInt)]);
       } else {
         // For other coins, merge all coins first, then split
         const primaryCoinA = txb.object(coinObjectsA.data[0].coinObjectId);
@@ -853,12 +889,12 @@ export class CetusService {
           const otherCoinsA = coinObjectsA.data.slice(1).map((c: any) => txb.object(c.coinObjectId));
           txb.mergeCoins(primaryCoinA, otherCoinsA);
         }
-        coinA = txb.splitCoins(primaryCoinA, [amountABigInt]);
+        coinA = txb.splitCoins(primaryCoinA, [toU64Safe(amountABigInt)]);
       }
       
       if (coinTypeB === '0x2::sui::SUI') {
         // Use gas coin for SUI (if both are SUI, this won't work - but that's not a valid pool)
-        coinB = txb.splitCoins(txb.gas, [amountBBigInt]);
+        coinB = txb.splitCoins(txb.gas, [toU64Safe(amountBBigInt)]);
       } else {
         // For other coins, merge all coins first, then split
         const primaryCoinB = txb.object(coinObjectsB.data[0].coinObjectId);
@@ -866,7 +902,7 @@ export class CetusService {
           const otherCoinsB = coinObjectsB.data.slice(1).map((c: any) => txb.object(c.coinObjectId));
           txb.mergeCoins(primaryCoinB, otherCoinsB);
         }
-        coinB = txb.splitCoins(primaryCoinB, [amountBBigInt]);
+        coinB = txb.splitCoins(primaryCoinB, [toU64Safe(amountBBigInt)]);
       }
       
       // Calculate slippage sqrt price (optional parameter)

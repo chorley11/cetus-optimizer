@@ -88,9 +88,32 @@ export function calculatePositionAmounts(
   const amountAWithDecimals = amountA.mul(new Decimal(10).pow(tokenADecimals));
   const amountBWithDecimals = amountB.mul(new Decimal(10).pow(tokenBDecimals));
 
+  // Validate amounts are reasonable (check if they exceed u64 max: 18446744073709551615)
+  const U64_MAX = new Decimal('18446744073709551615');
+  const amountAStr = amountAWithDecimals.toFixed(0);
+  const amountBStr = amountBWithDecimals.toFixed(0);
+  
+  if (amountAWithDecimals.gt(U64_MAX)) {
+    throw new Error(
+      `Calculated amount A (${amountAStr}) exceeds u64 maximum. ` +
+      `This suggests a calculation error. ` +
+      `Inputs: targetUsd=${targetUsd}, currentPrice=${currentPrice}, ` +
+      `priceLower=${priceLower}, priceUpper=${priceUpper}, tokenADecimals=${tokenADecimals}`
+    );
+  }
+  
+  if (amountBWithDecimals.gt(U64_MAX)) {
+    throw new Error(
+      `Calculated amount B (${amountBStr}) exceeds u64 maximum. ` +
+      `This suggests a calculation error. ` +
+      `Inputs: targetUsd=${targetUsd}, currentPrice=${currentPrice}, ` +
+      `priceLower=${priceLower}, priceUpper=${priceUpper}, tokenBDecimals=${tokenBDecimals}`
+    );
+  }
+
   return {
-    amountA: amountAWithDecimals.toFixed(0),
-    amountB: amountBWithDecimals.toFixed(0),
+    amountA: amountAStr,
+    amountB: amountBStr,
   };
 }
 
