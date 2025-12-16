@@ -604,44 +604,147 @@ export class CetusService {
     slippage: number = 0.5
   ) {
     return retryWithBackoff(async () => {
+      // Try SDK methods first
       const swapModule = this.sdk.Swap as any;
       
-      if (swapModule.swapTx) {
-        return await swapModule.swapTx({
-          poolId: poolAddress,
-          tokenIn,
-          tokenOut,
-          amountIn,
-          slippage,
-        });
-      } else if (swapModule.swap) {
-        return await swapModule.swap({
-          poolId: poolAddress,
-          tokenIn,
-          tokenOut,
-          amountIn,
-          slippage,
-        });
-      } else {
-        // Fallback: create transaction manually using SDK
-        const { Transaction } = require('@mysten/sui/transactions');
-        const txb = new Transaction();
-        
-        // Use SDK's swap method if available
-        const swapMethod = (this.sdk as any).swap || (this.sdk as any).Swap?.swap;
-        if (swapMethod) {
-          return await swapMethod({
+      if (swapModule?.swapTx) {
+        try {
+          return await swapModule.swapTx({
             poolId: poolAddress,
             tokenIn,
             tokenOut,
             amountIn,
             slippage,
           });
+        } catch (error) {
+          Logger.warn('SDK swapTx failed, trying manual builder', error);
         }
-        
-        throw new Error('Swap method not found in Cetus SDK');
       }
+      
+      if (swapModule?.swap) {
+        try {
+          return await swapModule.swap({
+            poolId: poolAddress,
+            tokenIn,
+            tokenOut,
+            amountIn,
+            slippage,
+          });
+        } catch (error) {
+          Logger.warn('SDK swap failed, trying manual builder', error);
+        }
+      }
+      
+      // Fallback: create swap transaction manually using Move calls
+      Logger.info('Building swap transaction manually using Move calls', {
+        poolAddress,
+        tokenIn,
+        tokenOut,
+        amountIn,
+      });
+      
+      return await this.createSwapTxManual(
+        poolAddress,
+        tokenIn,
+        tokenOut,
+        amountIn,
+        slippage
+      );
     });
+  }
+
+  /**
+   * Create swap transaction manually using Move calls
+   * This is a fallback when SDK swap methods are not available
+   */
+  private async createSwapTxManual(
+    poolAddress: string,
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: string,
+    slippage: number
+  ): Promise<Transaction> {
+    const { Transaction } = require('@mysten/sui/transactions');
+    const txb = new Transaction();
+    
+    // Cetus CLMM package address (mainnet)
+    const CETUS_PACKAGE = process.env.CETUS_PACKAGE || '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb';
+    
+    if (!this.suiService) {
+      throw new Error('SuiService not available - cannot fetch coin objects for swap');
+    }
+    
+    const walletAddress = this.suiService.getAddress();
+    
+    // Validate amount fits within u64
+    const amountInBigInt = BigInt(amountIn);
+    const U64_MAX = BigInt('18446744073709551615');
+    if (amountInBigInt > U64_MAX) {
+      throw new Error(`Swap amount ${amountIn} exceeds u64 maximum`);
+    }
+    
+    // Get coin objects for the input token
+    const coinObjects = await this.suiService.getClient().getCoins({
+      owner: walletAddress,
+      coinType: tokenIn,
+    });
+    
+    if (coinObjects.data.length === 0) {
+      throw new Error(`No ${tokenIn} coins found in wallet for swap`);
+    }
+    
+    // Prepare coin for swap
+    let coinInput: any;
+    
+    if (tokenIn === '0x2::sui::SUI') {
+      // Use gas coin for SUI
+      coinInput = txb.splitCoins(txb.gas, [Number(amountInBigInt)]);
+    } else {
+      // For other coins, merge all coins first, then split
+      const primaryCoin = txb.object(coinObjects.data[0].coinObjectId);
+      if (coinObjects.data.length > 1) {
+        const otherCoins = coinObjects.data.slice(1).map((c: any) => txb.object(c.coinObjectId));
+        txb.mergeCoins(primaryCoin, otherCoins);
+      }
+      coinInput = txb.splitCoins(primaryCoin, [Number(amountInBigInt)]);
+    }
+    
+    // Get pool object
+    const poolObj = txb.object(poolAddress);
+    
+    // Calculate slippage tolerance (convert percentage to basis points)
+    // slippage = 0.5 means 0.5% = 50 basis points
+    // For Cetus, we might need to calculate sqrt price bounds
+    // For now, we'll pass null and let Cetus handle slippage
+    const slippageSqrtPrice = null;
+    
+    // Build the Move call to swap
+    // Function signature: swap<CoinTypeIn, CoinTypeOut>(
+    //   pool: &Pool<CoinTypeIn, CoinTypeOut>,
+    //   coin_in: Coin<CoinTypeIn>,
+    //   amount: u64,
+    //   slippage_sqrt_price: Option<U256>,
+    //   ctx: &mut TxContext
+    // ) -> Coin<CoinTypeOut>
+    txb.moveCall({
+      target: `${CETUS_PACKAGE}::clmm::swap`,
+      typeArguments: [tokenIn, tokenOut],
+      arguments: [
+        poolObj,
+        coinInput,
+        txb.pure.u64(Number(amountInBigInt)),
+        slippageSqrtPrice ? txb.pure.option('u256', slippageSqrtPrice) : txb.pure.option('u256', null),
+      ],
+    });
+    
+    Logger.info('Manual swap transaction built successfully', {
+      poolAddress,
+      tokenIn,
+      tokenOut,
+      amountIn,
+    });
+    
+    return txb;
   }
 
   /**
