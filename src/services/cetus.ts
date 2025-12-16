@@ -245,7 +245,52 @@ export class CetusService {
       // price = (sqrtPrice / 2^96)^2
       const sqrtPrice = BigInt(pool.current_sqrt_price || pool.currentSqrtPrice || '0');
       const Q96 = BigInt(2) ** BigInt(96);
-      const price = Number(sqrtPrice * sqrtPrice) / Number(Q96 * Q96);
+      
+      // Calculate price with proper precision handling
+      // Use BigInt arithmetic to avoid precision loss
+      const sqrtPriceSquared = sqrtPrice * sqrtPrice;
+      const Q96Squared = Q96 * Q96;
+      
+      // Convert to number with proper scaling to avoid precision issues
+      // For very large numbers, we need to handle division carefully
+      let price: number;
+      if (sqrtPriceSquared < Q96Squared) {
+        // Price < 1: divide as BigInt then convert
+        // Multiply numerator by large factor to maintain precision
+        const SCALE = BigInt(1e18);
+        const scaledPrice = (sqrtPriceSquared * SCALE) / Q96Squared;
+        price = Number(scaledPrice) / Number(SCALE);
+      } else {
+        // Price >= 1: can convert directly
+        price = Number(sqrtPriceSquared) / Number(Q96Squared);
+      }
+      
+      // Validate price is reasonable (between 1e-15 and 1e15)
+      // Extremely small or large prices suggest calculation errors or invalid pool data
+      // Note: Some pools may have very small prices, but values < 1e-15 are likely errors
+      if (!isFinite(price) || isNaN(price) || price <= 0) {
+        Logger.error('Invalid price calculated from sqrtPrice', {
+          poolAddress,
+          sqrtPrice: sqrtPrice.toString(),
+          calculatedPrice: price,
+          sqrtPriceSquared: sqrtPriceSquared.toString(),
+          Q96Squared: Q96Squared.toString(),
+        });
+        throw new Error(
+          `Invalid price calculated for pool ${poolAddress}: ${price}. ` +
+          `sqrtPrice: ${sqrtPrice.toString()}. This suggests the pool data may be invalid or corrupted.`
+        );
+      }
+      
+      if (price < 1e-15 || price > 1e15) {
+        Logger.warn('Price outside normal range - may indicate calculation issue or very unusual pool', {
+          poolAddress,
+          price,
+          sqrtPrice: sqrtPrice.toString(),
+          note: 'Price will be validated again in liquidity calculation',
+        });
+        // Don't throw here - let liquidity calculation handle it with more context
+      }
       
       return {
         poolAddress,

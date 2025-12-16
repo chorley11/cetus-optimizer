@@ -67,6 +67,32 @@ export function calculatePositionAmounts(
   tokenADecimals: number,
   tokenBDecimals: number
 ): { amountA: string; amountB: string } {
+  // Validate inputs
+  if (currentPrice <= 0 || priceLower <= 0 || priceUpper <= 0) {
+    throw new Error(
+      `Invalid price values: currentPrice=${currentPrice}, priceLower=${priceLower}, priceUpper=${priceUpper}. ` +
+      `Prices must be positive numbers.`
+    );
+  }
+  
+  if (priceLower >= priceUpper) {
+    throw new Error(
+      `Invalid price range: priceLower (${priceLower}) must be less than priceUpper (${priceUpper})`
+    );
+  }
+  
+  // Validate price is in reasonable range (between 1e-12 and 1e12)
+  // Extremely small or large prices suggest calculation errors
+  // Note: Some pools may have very small prices, but values < 1e-12 are likely errors
+  if (currentPrice < 1e-12 || currentPrice > 1e12) {
+    throw new Error(
+      `Price value (${currentPrice}) is outside reasonable range (1e-12 to 1e12). ` +
+      `This suggests a calculation error in the pool price. ` +
+      `Please verify the pool address and that the pool data is correct. ` +
+      `If this is a legitimate very small price, you may need to adjust the validation threshold.`
+    );
+  }
+  
   const targetUsdDec = new Decimal(targetUsd);
   const currentPriceDec = new Decimal(currentPrice);
   const priceLowerDec = new Decimal(priceLower);
@@ -76,9 +102,17 @@ export function calculatePositionAmounts(
   const sqrtPriceLower = priceLowerDec.sqrt();
   const sqrtPriceUpper = priceUpperDec.sqrt();
   const sqrtPriceCurrent = currentPriceDec.sqrt();
+  
+  // Validate sqrt price range is reasonable
+  const sqrtRange = sqrtPriceUpper.minus(sqrtPriceLower);
+  if (sqrtRange.lte(0)) {
+    throw new Error(
+      `Invalid sqrt price range: sqrtPriceUpper (${sqrtPriceUpper.toString()}) <= sqrtPriceLower (${sqrtPriceLower.toString()})`
+    );
+  }
 
   // Calculate liquidity needed
-  const liquidity = targetUsdDec.div(sqrtPriceUpper.minus(sqrtPriceLower));
+  const liquidity = targetUsdDec.div(sqrtRange);
 
   // Calculate amounts
   const amountA = liquidity.mul(sqrtPriceUpper.minus(sqrtPriceCurrent)).div(sqrtPriceCurrent.mul(sqrtPriceUpper));
