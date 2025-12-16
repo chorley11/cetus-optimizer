@@ -36,20 +36,54 @@ export class TelegramService {
   constructor(token: string, chatId: string) {
     this.chatId = chatId;
     try {
-      this.bot = new TelegramBot(token, { polling: true });
-      Logger.info('Telegram bot initialized with polling enabled');
+      // Check if polling should be enabled (default: true, but can be disabled via env var)
+      const enablePolling = process.env.TELEGRAM_ENABLE_POLLING !== 'false';
       
-      // Handle errors
-      this.bot.on('polling_error', (error) => {
-        Logger.error('Telegram polling error', error);
-      });
-      
-      // Log when bot is ready
-      this.bot.on('message', (msg) => {
-        Logger.debug('Received Telegram message', { from: msg.from?.username, text: msg.text });
-      });
+      if (enablePolling) {
+        this.bot = new TelegramBot(token, { polling: true });
+        Logger.info('Telegram bot initialized with polling enabled');
+        
+        // Handle polling errors - specifically handle 409 conflict (multiple instances)
+        this.bot.on('polling_error', (error: any) => {
+          // Handle 409 Conflict: multiple bot instances running
+          if (error.message?.includes('409') || error.message?.includes('terminated by other getUpdates')) {
+            Logger.warn(
+              'Telegram polling conflict detected - another bot instance is running. ' +
+              'Polling will be disabled, but message sending will still work. ' +
+              'To fix: ensure only one bot instance is running, or set TELEGRAM_ENABLE_POLLING=false'
+            );
+            // Stop polling but keep bot instance for sending messages
+            this.bot?.stopPolling().catch(() => {});
+            // Reinitialize without polling
+            try {
+              this.bot = new TelegramBot(token, { polling: false });
+              Logger.info('Telegram bot reinitialized without polling (send-only mode)');
+            } catch (reinitError) {
+              Logger.error('Failed to reinitialize Telegram bot without polling', reinitError);
+            }
+          } else {
+            Logger.error('Telegram polling error', error);
+          }
+        });
+        
+        // Log when bot is ready
+        this.bot.on('message', (msg) => {
+          Logger.debug('Received Telegram message', { from: msg.from?.username, text: msg.text });
+        });
+      } else {
+        // Initialize without polling (send-only mode)
+        this.bot = new TelegramBot(token, { polling: false });
+        Logger.info('Telegram bot initialized without polling (send-only mode)');
+      }
     } catch (error) {
       Logger.error('Failed to initialize Telegram bot', error);
+      // Try to initialize without polling as fallback
+      try {
+        this.bot = new TelegramBot(token, { polling: false });
+        Logger.info('Telegram bot initialized without polling as fallback');
+      } catch (fallbackError) {
+        Logger.error('Failed to initialize Telegram bot even without polling', fallbackError);
+      }
     }
   }
 
