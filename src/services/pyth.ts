@@ -136,18 +136,30 @@ export class PythService {
         return suiPrice / usdcPrice; // SUI per USDC
       } else if (poolName === 'DEEP/SUI') {
         // DEEP/USD feed does not exist in Pyth - throw error to trigger Cetus fallback
+        // This is expected behavior, not an actual error
         Logger.debug('DEEP/USD feed not available in Pyth, will fallback to Cetus');
         throw new Error(`DEEP/USD price feed not available in Pyth Network - using Cetus fallback`);
       } else if (poolName === 'WAL/SUI') {
         // WAL/USD feed does not exist in Pyth - throw error to trigger Cetus fallback
+        // This is expected behavior, not an actual error
         Logger.debug('WAL/USD feed not available in Pyth, will fallback to Cetus');
         throw new Error(`WAL/USD price feed not available in Pyth Network - using Cetus fallback`);
       } else {
         throw new Error(`Unsupported pool pair: ${poolName}`);
       }
-    } catch (error) {
-      Logger.error(`Failed to get pool price for ${poolName}`, error);
-      throw error;
+    } catch (error: any) {
+      // Only log as error if it's not an expected fallback case
+      const isExpectedFallback = error.message?.includes('not available') && 
+                                 error.message?.includes('using Cetus fallback');
+      
+      if (isExpectedFallback) {
+        // This is expected - don't log as error, just re-throw for fallback handling
+        throw error;
+      } else {
+        // Actual error - log it
+        Logger.error(`Failed to get pool price for ${poolName}`, error);
+        throw error;
+      }
     }
   }
 }
