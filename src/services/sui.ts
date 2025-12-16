@@ -93,6 +93,10 @@ export class SuiService {
     }
 
     return retryWithBackoff(async () => {
+      // Set sender before building (required for transaction building)
+      const sender = this.keypair!.toSuiAddress();
+      txb.setSender(sender);
+      
       // Convert Transaction to bytes for dry run
       const txBytes = await txb.build({ client: this.client });
       return await this.client.dryRunTransactionBlock({
